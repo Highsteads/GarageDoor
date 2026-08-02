@@ -288,11 +288,14 @@ def test_homekit_variable_is_written_inverted(plugin):
     assert isinstance(var_writes[-1][2], str)          # variables take STRINGS
 
 
-def test_the_light_follows_presence_not_just_the_door(plugin):
-    """The bug a real door found: _apply_light only ran on a state change, so
-    walking into the garage a minute after it opened never lit anything."""
+def test_the_light_is_re_evaluated_after_the_door_settles(plugin):
+    """The bug a real door found: _apply_light only ran inside the state-change
+    branch, so nothing looked at the light again once the door had settled.
+    Driven here through the presence gate because that is the input which
+    changes long after the door stops moving."""
     p, ind, door, _ = plugin
     p.pluginPrefs["shadowMode"] = "false"
+    door.pluginProps["lightOnlyIfPresent"] = "true"
     p.startup()
     ind.devices[105].states["onState"] = False      # nobody there yet
     ind.devices[105].onState = False
@@ -302,12 +305,27 @@ def test_the_light_follows_presence_not_just_the_door(plugin):
     ind.commands.clear()
 
     p._evaluate(door.id)                            # settled, still empty
-    assert [c for c in ind.commands if c[1] == 104] == []
+    assert ("on", 104) not in ind.commands
 
     ind.devices[105].states["onState"] = True       # somebody walks in
     ind.devices[105].onState = True
     p._evaluate(door.id)                            # no door change at all
-    assert ("on", 104) in ind.commands, "the light should follow presence"
+    assert ("on", 104) in ind.commands, "the light must be looked at again"
+
+
+def test_opening_a_dark_garage_lights_it_without_anyone_present(plugin):
+    """The behaviour actually asked for: door opens, it is dark, light on."""
+    p, ind, door, _ = plugin
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    ind.devices[105].states["onState"] = False       # nobody in the garage
+    ind.devices[105].onState = False
+    p.deviceStartComm(door)
+    ind.commands.clear()
+    ind.devices[101].states["contact"] = False       # door opens
+    ind.devices[102].states["contact"] = True
+    p._evaluate(door.id)
+    assert ("on", 104) in ind.commands
 
 
 def test_the_light_is_not_commanded_over_and_over(plugin):

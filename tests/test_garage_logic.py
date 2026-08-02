@@ -192,18 +192,28 @@ def test_light_stays_off_in_daylight():
     assert g.light_decision(g.OPEN, present=True, lux=500) is False
 
 
-def test_light_stays_off_when_nobody_walked_in():
-    """The neighbour's remote, or a scheduled close, does not need the light."""
-    assert g.light_decision(g.OPEN, present=False, lux=5) is False
+def test_by_default_the_light_does_not_wait_for_a_person():
+    """A garage light that waits until it is sure somebody is in there leaves
+    you standing in the doorway in the dark. On when the door opens and it is
+    dark enough, off when it shuts."""
+    assert g.light_decision(g.OPEN, present=False, lux=5) is True
+    assert g.light_decision(g.OPEN, present=None,  lux=5) is True
+    assert g.light_decision(g.CLOSED, present=True, lux=5) is False
+
+
+def test_presence_gating_still_works_when_asked_for():
+    cfg = {"lightOnlyIfPresent": True}
+    assert g.light_decision(g.OPEN, present=False, lux=5, cfg=cfg) is False
+    assert g.light_decision(g.OPEN, present=True,  lux=5, cfg=cfg) is True
+    assert g.light_decision(g.OPEN, present=None,  lux=5, cfg=cfg) is None
 
 
 def test_light_goes_off_when_the_door_shuts():
     assert g.light_decision(g.CLOSED, present=True, lux=5) is False
 
 
-def test_no_opinion_without_a_reading():
-    """Missing sensors mean leave the light alone, not guess at it."""
-    assert g.light_decision(g.OPEN, present=None, lux=5) is None
+def test_no_opinion_without_a_light_reading():
+    """A missing lux reading means leave the light alone, not guess at it."""
     assert g.light_decision(g.OPEN, present=True, lux=None) is None
     assert g.light_decision(g.OPEN, present=True, lux="dim") is None
 
@@ -211,6 +221,13 @@ def test_no_opinion_without_a_reading():
 def test_gates_can_be_turned_off_individually():
     cfg = {"lightOnlyIfPresent": False, "lightOnlyIfDark": False}
     assert g.light_decision(g.OPEN, present=None, lux=None, cfg=cfg) is True
+
+
+def test_the_lux_threshold_is_honoured_at_the_boundary():
+    cfg = {"luxThreshold": 400}
+    assert g.light_decision(g.OPEN, None, 399, cfg) is True
+    assert g.light_decision(g.OPEN, None, 400, cfg) is True    # not brighter than
+    assert g.light_decision(g.OPEN, None, 401, cfg) is False
 
 
 # ══════════════════════════════════════════════════════════════════════
