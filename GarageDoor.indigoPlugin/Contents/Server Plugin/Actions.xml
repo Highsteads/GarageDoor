@@ -1,33 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Actions>
-    <!-- NO uiPath, deliberately. With one, these actions get filed inside
-         Indigo's own "Device Actions" submenu alongside the built-in Turn On /
-         Turn Off / Toggle, and it is far too easy to pick the relay's built-in
-         Toggle instead of this plugin's. Without it they appear under the
-         plugin's own name in the picker, which is unambiguous.
+    <!-- NO uiPath: with one, these get filed inside Indigo's OWN "Device
+         Actions" submenu beside the built-in Turn On / Turn Off / Toggle for
+         every device in the house, and all three repoints here went to the
+         relay by mistake. Without it they appear under the plugin's own name.
 
-         NO ConfigUI either. An action with a ConfigUI must have its dialog
-         completed, and an unfinished one saves as a step that fails at run time
-         with "Action has not been completely configured". These need no
-         parameters, so they should not ask for any. -->
+         EVERY action HAS a ConfigUI, even though these need no parameters.
+         Indigo marks an action step "configured" when its dialog is completed,
+         and an action with NO ConfigUI has no dialog — so the step can never
+         become configured and fails at run time with "Action has not been
+         completely configured". Removing the ConfigUI in v1.2 to dodge that
+         error is what made it unfixable. No SDK example ships an action
+         without one. -->
     <Action id="openDoor" deviceFilter="self.garageDoor">
         <Name>Open Garage Door</Name>
         <CallbackMethod>actionOpenDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="lbl" type="label">
+                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+            </Field>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Optional note, shown in the device's "Last operated by":</Label>
+            </Field>
+        </ConfigUI>
     </Action>
     <Action id="closeDoor" deviceFilter="self.garageDoor">
         <Name>Close Garage Door</Name>
         <CallbackMethod>actionCloseDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="lbl" type="label">
+                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+            </Field>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Optional note, shown in the device's "Last operated by":</Label>
+            </Field>
+        </ConfigUI>
     </Action>
     <Action id="toggleDoor" deviceFilter="self.garageDoor">
         <Name>Toggle Garage Door</Name>
         <CallbackMethod>actionToggleDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="lbl" type="label">
+                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+            </Field>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Optional note, shown in the device's "Last operated by":</Label>
+            </Field>
+        </ConfigUI>
     </Action>
     <Action id="pulseRelay" deviceFilter="self.garageDoor">
         <Name>Pulse Relay (diagnostic)</Name>
         <CallbackMethod>actionPulseRelay</CallbackMethod>
+        <ConfigUI>
+            <Field id="lbl" type="label">
+                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+            </Field>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Optional note, shown in the device's "Last operated by":</Label>
+            </Field>
+        </ConfigUI>
     </Action>
     <Action id="refreshState" deviceFilter="self.garageDoor">
         <Name>Re-read Door State</Name>
         <CallbackMethod>actionRefreshState</CallbackMethod>
+        <ConfigUI>
+            <Field id="lbl" type="label">
+                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+            </Field>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Optional note, shown in the device's "Last operated by":</Label>
+            </Field>
+        </ConfigUI>
     </Action>
 </Actions>

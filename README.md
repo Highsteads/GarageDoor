@@ -73,6 +73,8 @@ a device or variable you already have.
 
 ## Version history
 
+**1.5** (02-Aug-2026) — Fixes "Action has not been completely configured" on the door actions. Indigo marks an action step as configured when its dialog is completed, and 1.2 had removed the dialog altogether — so the step could never become configured and failed every time it ran. The dialog is back. It asks for nothing you need to fill in.
+
 **1.4** (02-Aug-2026) — The garage light follows the door and the light level by default. Presence-gating is still there as an option but it is now off: a light that waits until it is certain somebody is in the garage leaves you standing in the dark, which is not what a garage light is for.
 
 **1.3** (02-Aug-2026) — The garage light now follows presence properly. It was only being considered when the door itself changed, so walking into the garage a minute after opening it never turned anything on. It is now checked continuously, and only actually switched when the answer changes.
