@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Devices>
+    <!-- type="custom" deliberately, for two reasons and one of them is safety.
+         A relay-typed garage door is swept by "all devices off" / "all lights
+         on" actions, which is a real way to open a garage by accident. custom
+         is also free of the reserved-state traps, so doorState can be a proper
+         enum instead of fighting onOffState. -->
+    <Device type="custom" id="garageDoor">
+        <Name>Garage Door</Name>
+        <ConfigUI>
+            <Field id="lbl_sensors" type="label">
+                <Label>The two contact sensors are POSITION sensors — each reports whether the door is at that end of its travel. Both reeds apart means the door is between them, which is how the plugin knows it is moving.</Label>
+            </Field>
+            <Field id="bottomContactId" type="menu">
+                <Label>Bottom contact (made = door closed):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="topContactId" type="menu">
+                <Label>Top contact (made = door open):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+
+            <Field id="sep1" type="separator"/>
+            <Field id="relayId" type="menu">
+                <Label>Door relay (momentary):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="pulseMilliseconds" type="textfield" defaultValue="1000">
+                <Label>Pulse length (ms):</Label>
+            </Field>
+            <Field id="travelTimeoutSeconds" type="textfield" defaultValue="30">
+                <Label>Travel timeout (s) — longer than this and it is stuck:</Label>
+            </Field>
+            <Field id="operationDebounceSeconds" type="textfield" defaultValue="5">
+                <Label>Ignore repeat operations within (s):</Label>
+            </Field>
+
+            <Field id="sep2" type="separator"/>
+            <Field id="lbl_alarm" type="label">
+                <Label>Urgency is not a flat fifteen minutes. A door open in daylight with somebody home is an oversight. The same door with the house empty is a different event.</Label>
+            </Field>
+            <Field id="firstAlertMinutes" type="textfield" defaultValue="15">
+                <Label>First alert after (minutes):</Label>
+            </Field>
+            <Field id="escalateAfterMinutes" type="textfield" defaultValue="45">
+                <Label>Escalate to urgent after (minutes):</Label>
+            </Field>
+            <Field id="repeatEveryMinutes" type="textfield" defaultValue="15">
+                <Label>Repeat the alert every (minutes, 0 = once):</Label>
+            </Field>
+            <Field id="awayVariable" type="textfield" defaultValue="Away">
+                <Label>"Away" variable name (blank to ignore):</Label>
+            </Field>
+            <Field id="urgentWhenAway" type="checkbox" defaultValue="true">
+                <Label>Urgent straight away when nobody is home</Label>
+            </Field>
+            <Field id="nightVariable" type="textfield" defaultValue="Nightime">
+                <Label>"Dark" variable name (blank to ignore):</Label>
+            </Field>
+            <Field id="urgentWhenDark" type="checkbox" defaultValue="true">
+                <Label>Urgent when it is dark</Label>
+            </Field>
+
+            <Field id="sep3" type="separator"/>
+            <Field id="presenceSensorId" type="menu">
+                <Label>Garage presence sensor (optional):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="garageLightId" type="menu">
+                <Label>Garage light (optional):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="luxSensorId" type="menu">
+                <Label>Light-level sensor (optional):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="lightOnlyIfPresent" type="checkbox" defaultValue="true">
+                <Label>Only light it if somebody is actually in there</Label>
+            </Field>
+            <Field id="lightOnlyIfDark" type="checkbox" defaultValue="true">
+                <Label>Only light it when it is dark</Label>
+            </Field>
+            <Field id="luxThreshold" type="textfield" defaultValue="30">
+                <Label>Dark below (lux):</Label>
+            </Field>
+
+            <Field id="sep4" type="separator"/>
+            <Field id="homekitVariable" type="textfield" defaultValue="">
+                <Label>HomeKit mirror variable name (optional):</Label>
+            </Field>
+            <Field id="homekitInvert" type="checkbox" defaultValue="true">
+                <Label>Inverted — "on" means CLOSED (HomeKitLink-Siri expects this)</Label>
+            </Field>
+        </ConfigUI>
+        <UiDisplayStateId>doorState</UiDisplayStateId>
+        <States>
+            <State id="doorState">
+                <ValueType>
+                    <List>
+                        <Option value="closed">Closed</Option>
+                        <Option value="open">Open</Option>
+                        <Option value="moving">Moving</Option>
+                        <Option value="stuck">Stuck</Option>
+                        <Option value="unknown">Unknown</Option>
+                    </List>
+                </ValueType>
+                <TriggerLabel>Door state</TriggerLabel>
+                <ControlPageLabel>Door state</ControlPageLabel>
+            </State>
+            <State id="isOpen">
+                <ValueType boolType="TrueFalse">Boolean</ValueType>
+                <TriggerLabel>Is open</TriggerLabel>
+                <ControlPageLabel>Is open</ControlPageLabel>
+            </State>
+            <State id="openDurationMinutes">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Minutes open</TriggerLabel>
+                <ControlPageLabel>Minutes open</ControlPageLabel>
+            </State>
+            <State id="alertLevel">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Alert level (0 none, 1 open, 2 urgent)</TriggerLabel>
+                <ControlPageLabel>Alert level</ControlPageLabel>
+            </State>
+            <State id="travelSeconds">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Last travel time (s)</TriggerLabel>
+                <ControlPageLabel>Travel seconds</ControlPageLabel>
+            </State>
+            <State id="sensorsHealthy">
+                <ValueType boolType="TrueFalse">Boolean</ValueType>
+                <TriggerLabel>Sensors healthy</TriggerLabel>
+                <ControlPageLabel>Sensors healthy</ControlPageLabel>
+            </State>
+            <State id="lastOpened">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last opened</TriggerLabel>
+                <ControlPageLabel>Last opened</ControlPageLabel>
+            </State>
+            <State id="lastClosed">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last closed</TriggerLabel>
+                <ControlPageLabel>Last closed</ControlPageLabel>
+            </State>
+            <State id="lastOperatedBy">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last operated by</TriggerLabel>
+                <ControlPageLabel>Last operated by</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+</Devices>

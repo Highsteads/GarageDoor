@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Events>
+    <!-- The plugin says what happened. What to do about it is yours: point your
+         existing lamp and notification action groups at these. -->
+    <Event id="doorOpened">
+        <Name>Garage Door Opened</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorClosed">
+        <Name>Garage Door Closed</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorStartedMoving">
+        <Name>Garage Door Started Moving</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorLeftOpen">
+        <Name>Garage Door Left Open</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorStillOpen">
+        <Name>Garage Door Still Open (urgent)</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorStuck">
+        <Name>Garage Door Stuck Part-Way</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="sensorFault">
+        <Name>Garage Door Sensor Fault</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+</Events>

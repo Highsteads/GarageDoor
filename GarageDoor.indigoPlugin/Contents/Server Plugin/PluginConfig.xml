@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PluginConfig>
+    <Field id="lbl_shadow" type="label">
+        <Label>Shadow Mode ships ON. The plugin watches the door, reports its state, fires events and runs the open alarm — but it will not touch the relay or the light. Leave it on until you have watched the state machine follow the real door for a few days, then turn it off to hand over control.</Label>
+    </Field>
+    <Field id="shadowMode" type="checkbox" defaultValue="true">
+        <Label>Shadow Mode — watch and report, do not operate the door</Label>
+    </Field>
+    <Field id="sep1" type="separator"/>
+    <Field id="logLevel" type="menu" defaultValue="INFO">
+        <Label>Logging level:</Label>
+        <List>
+            <Option value="DEBUG">Debug</Option>
+            <Option value="INFO">Info</Option>
+            <Option value="WARNING">Warning</Option>
+        </List>
+    </Field>
+</PluginConfig>

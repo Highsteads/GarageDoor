@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MenuItems>
+    <MenuItem id="menuTestSetup">
+        <Name>Test Garage Door Setup</Name>
+        <CallbackMethod>menuTestSetup</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="sep_info" isSeparator="true"/>
+    <MenuItem id="showPluginInfo">
+        <Name>Show Plugin Info</Name>
+        <CallbackMethod>showPluginInfo</CallbackMethod>
+    </MenuItem>
+</MenuItems>

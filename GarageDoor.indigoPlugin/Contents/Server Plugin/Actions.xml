@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Actions>
+    <!-- uiPath is PascalCase with NO spaces. A space here crashes the Indigo client. -->
+    <Action id="openDoor" deviceFilter="self.garageDoor" uiPath="DeviceActions">
+        <Name>Open Garage Door</Name>
+        <CallbackMethod>actionOpenDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Who asked (optional, shown in Last operated by):</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+    <Action id="closeDoor" deviceFilter="self.garageDoor" uiPath="DeviceActions">
+        <Name>Close Garage Door</Name>
+        <CallbackMethod>actionCloseDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Who asked (optional, shown in Last operated by):</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+    <Action id="toggleDoor" deviceFilter="self.garageDoor" uiPath="DeviceActions">
+        <Name>Toggle Garage Door</Name>
+        <CallbackMethod>actionToggleDoor</CallbackMethod>
+        <ConfigUI>
+            <Field id="source" type="textfield" defaultValue="">
+                <Label>Who asked (optional, shown in Last operated by):</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+    <Action id="pulseRelay" deviceFilter="self.garageDoor" uiPath="DeviceActions">
+        <Name>Pulse Relay (diagnostic)</Name>
+        <CallbackMethod>actionPulseRelay</CallbackMethod>
+    </Action>
+    <Action id="refreshState" deviceFilter="self.garageDoor" uiPath="DeviceActions">
+        <Name>Re-read Door State</Name>
+        <CallbackMethod>actionRefreshState</CallbackMethod>
+    </Action>
+</Actions>
