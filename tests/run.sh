@@ -14,7 +14,8 @@ python3 -m pytest tests -q
 
 echo
 echo "== python syntax =="
-python3 -m py_compile "GarageDoor.indigoPlugin/Contents/Server Plugin/plugin.py" \
+# -B: no __pycache__. It used to be written INSIDE the shipped bundle.
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile "GarageDoor.indigoPlugin/Contents/Server Plugin/plugin.py" \
                       "GarageDoor.indigoPlugin/Contents/Server Plugin/garage_logic.py"
 echo "  ok"
 
@@ -30,4 +31,6 @@ echo "== lint (errors only) =="
 python3 -m ruff check . && echo "  ok"
 
 echo
+find GarageDoor.indigoPlugin -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+
 echo "All GarageDoor contract tests passed."
