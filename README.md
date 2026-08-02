@@ -74,6 +74,8 @@ a device or variable you already have.
 
 ## Version history
 
+**1.2** (02-Aug-2026) — The door actions now appear under the plugin's own name in the action picker rather than inside Indigo's built-in **Device Actions** submenu, where they sat next to Turn On, Turn Off and Toggle and were easy to confuse with the relay's own. They also no longer ask for anything, so there is no dialog to leave half-finished.
+
 **1.1** (02-Aug-2026) — Takes over the house lamps that announce the door, so the scripts that used to do it can retire. Blue while it moves, red while it is open, and on closing they go back to matching a reference lamp elsewhere in the house. Every part is optional and every colour is a setting — leave the devices blank and none of it happens.
 
 **1.0** (02-Aug-2026) — First release. Door state from two position sensors, escalating

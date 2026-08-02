@@ -6,7 +6,7 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Opus 5
 # Date:        02-08-2026
-# Version:     1.1
+# Version:     1.2
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
@@ -517,7 +517,7 @@ class Plugin(indigo.PluginBase):
         if st.get("state") == G.OPEN:
             self.logger.info(f"{dev.name}: already open, nothing to do")
             return                                    # idempotent, per the spec
-        self._pulse(dev, action.props.get("source") or "action:open")
+        self._pulse(dev, "action:open")
 
     def actionCloseDoor(self, action):
         dev = self._door_for(action)
@@ -527,12 +527,12 @@ class Plugin(indigo.PluginBase):
         if st.get("state") == G.CLOSED:
             self.logger.info(f"{dev.name}: already closed, nothing to do")
             return
-        self._pulse(dev, action.props.get("source") or "action:close")
+        self._pulse(dev, "action:close")
 
     def actionToggleDoor(self, action):
         dev = self._door_for(action)
         if dev:
-            self._pulse(dev, action.props.get("source") or "action:toggle")
+            self._pulse(dev, "action:toggle")
 
     def actionPulseRelay(self, action):
         dev = self._door_for(action)
