@@ -6,7 +6,7 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Opus 5
 # Date:        02-08-2026
-# Version:     1.2
+# Version:     1.3
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
@@ -121,6 +121,7 @@ class Plugin(indigo.PluginBase):
             "last_notified_min": None,
             "last_pulse_at": 0.0,
             "operated_by": "",
+            "light_want": None,
         }
         # Index the contacts so deviceUpdated is a dict lookup, not a scan.
         for key in ("bottomContactId", "topContactId"):
@@ -304,7 +305,6 @@ class Plugin(indigo.PluginBase):
                     self._fire(EV_STUCK, dev)
                 self.logger.info(f"{dev.name}: {G.describe(state)}")
 
-            self._apply_light(dev, state, props)
             self._apply_lamps(dev, state, props)
             self._mirror_homekit(dev, state, props)
 
@@ -319,6 +319,12 @@ class Plugin(indigo.PluginBase):
         self._set(dev, "isOpen", state == G.OPEN)
         self._set(dev, "openDurationMinutes", int(open_min))
         self._set(dev, "sensorsHealthy", healthy)
+
+        # The light is evaluated EVERY tick, not just on a door transition.
+        # Presence changes minutes after the door settles — somebody walks in —
+        # and gating this on a state change meant the light never came on for
+        # them. _apply_light only sends a command when the answer changes.
+        self._apply_light(dev, state, props)
 
         # --- the alarm ---------------------------------------------------
         away  = self._var_true(props.get("awayVariable"))
@@ -361,6 +367,12 @@ class Plugin(indigo.PluginBase):
         want = G.light_decision(state, present, lux, props)
         if want is None:
             return                                  # no reading: leave it alone
+
+        st = self.doors.get(dev.id)
+        if st is not None:
+            if st.get("light_want") == want:
+                return                              # already said so, do not repeat
+            st["light_want"] = want
         try:
             if self._shadow_mode():
                 self.logger.debug(f"[shadow] would turn the garage light "

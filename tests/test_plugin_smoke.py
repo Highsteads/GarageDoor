@@ -286,3 +286,40 @@ def test_homekit_variable_is_written_inverted(plugin):
     var_writes = [c for c in ind.commands if c[0] == "var"]
     assert var_writes and var_writes[-1][2] == "off"   # open -> "off"
     assert isinstance(var_writes[-1][2], str)          # variables take STRINGS
+
+
+def test_the_light_follows_presence_not_just_the_door(plugin):
+    """The bug a real door found: _apply_light only ran on a state change, so
+    walking into the garage a minute after it opened never lit anything."""
+    p, ind, door, _ = plugin
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    ind.devices[105].states["onState"] = False      # nobody there yet
+    ind.devices[105].onState = False
+    ind.devices[101].states["contact"] = False      # door open
+    ind.devices[102].states["contact"] = True
+    p.deviceStartComm(door)
+    ind.commands.clear()
+
+    p._evaluate(door.id)                            # settled, still empty
+    assert [c for c in ind.commands if c[1] == 104] == []
+
+    ind.devices[105].states["onState"] = True       # somebody walks in
+    ind.devices[105].onState = True
+    p._evaluate(door.id)                            # no door change at all
+    assert ("on", 104) in ind.commands, "the light should follow presence"
+
+
+def test_the_light_is_not_commanded_over_and_over(plugin):
+    """Every tick evaluates it, but only a change is sent."""
+    p, ind, door, _ = plugin
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    ind.devices[101].states["contact"] = False
+    ind.devices[102].states["contact"] = True
+    p.deviceStartComm(door)
+    ind.commands.clear()
+    for _ in range(10):
+        p._evaluate(door.id)
+    light = [c for c in ind.commands if c[1] == 104]
+    assert len(light) <= 1, f"light commanded {len(light)} times for one state"
