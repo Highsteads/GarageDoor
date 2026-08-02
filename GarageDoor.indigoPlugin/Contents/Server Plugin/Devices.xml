@@ -74,8 +74,8 @@
                 <Label>Light-level sensor (optional):</Label>
                 <List class="indigo.devices" filter="" method="getDeviceList"/>
             </Field>
-            <Field id="lightOnlyIfPresent" type="checkbox" defaultValue="true">
-                <Label>Only light it if somebody is actually in there</Label>
+            <Field id="lightOnlyIfPresent" type="checkbox" defaultValue="false">
+                <Label>Only light it if somebody is actually in there (leave off to light it whenever the door opens)</Label>
             </Field>
             <Field id="lightOnlyIfDark" type="checkbox" defaultValue="true">
                 <Label>Only light it when it is dark</Label>

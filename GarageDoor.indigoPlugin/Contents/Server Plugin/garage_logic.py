@@ -34,7 +34,7 @@ DEFAULTS = {
     "urgentWhenAway":        True,
     "urgentWhenDark":        True,
     "lightOnlyIfDark":       True,
-    "lightOnlyIfPresent":    True,
+    "lightOnlyIfPresent":    False,
     "luxThreshold":          30,
     "lampsFollowDoor":       True,
 }
@@ -186,8 +186,10 @@ def alarm_decision(state, open_minutes, away, night, cfg=None,
 def light_decision(state, present, lux, cfg=None):
     """Should the garage light be on?
 
-    Follows people rather than the door: a door opening with nobody walking in
-    (the neighbour's remote, a scheduled close) does not need the light.
+    On when the door is not shut and it is dark enough to want it, off the
+    moment the door closes. Presence-gating is available but OFF by default:
+    a light that waits until it is certain somebody is in the garage leaves
+    you standing in the dark, which is not what a garage light is for.
 
     Returns True (on), False (off), or None (no opinion — leave it alone).
     """

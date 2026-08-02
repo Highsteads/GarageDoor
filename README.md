@@ -34,8 +34,7 @@ has been left open, is still open, is stuck, or that its sensors are contradicti
 What happens next is up to you — point your own action groups at those triggers and keep whatever
 notification and lighting behaviour you already have.
 
-**The garage light, if you want it.** Gated on presence and light level, so it follows people
-rather than the door. A door opening with nobody walking in does not need the light.
+**The garage light, if you want it.** On when the door opens and it is dark enough to want it, off the moment the door closes. There is an option to require presence as well, off by default.
 
 **A HomeKit mirror variable**, with an invert option, because HomeKitLink-Siri maps ON to Closed
 and that catches everybody once.
@@ -73,6 +72,8 @@ Indigo 2025.2 or later. No external services, no credentials, nothing to install
 a device or variable you already have.
 
 ## Version history
+
+**1.4** (02-Aug-2026) — The garage light follows the door and the light level by default. Presence-gating is still there as an option but it is now off: a light that waits until it is certain somebody is in the garage leaves you standing in the dark, which is not what a garage light is for.
 
 **1.3** (02-Aug-2026) — The garage light now follows presence properly. It was only being considered when the door itself changed, so walking into the garage a minute after opening it never turned anything on. It is now checked continuously, and only actually switched when the answer changes.
 

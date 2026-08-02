@@ -6,7 +6,7 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Opus 5
 # Date:        02-08-2026
-# Version:     1.3
+# Version:     1.4
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
