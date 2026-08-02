@@ -6,7 +6,7 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Opus 5
 # Date:        02-08-2026
-# Version:     1.0
+# Version:     1.1
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
@@ -57,6 +57,11 @@ EV_LEFT_OPEN    = "doorLeftOpen"
 EV_STILL_OPEN   = "doorStillOpen"
 EV_STUCK        = "doorStuck"
 EV_SENSOR_FAULT = "sensorFault"
+
+# Fallbacks matching the retired controller's HALL_COLORS, used when a
+# colour field is blank or unreadable.
+_LAMP_FALLBACK = {"moving": (0, 0, 100), "open": (100, 0, 0),
+                  "restore": (100, 100, 100)}
 
 
 class Plugin(indigo.PluginBase):
@@ -300,6 +305,7 @@ class Plugin(indigo.PluginBase):
                 self.logger.info(f"{dev.name}: {G.describe(state)}")
 
             self._apply_light(dev, state, props)
+            self._apply_lamps(dev, state, props)
             self._mirror_homekit(dev, state, props)
 
         if not healthy and previous is not None and state != previous:
@@ -363,6 +369,58 @@ class Plugin(indigo.PluginBase):
             indigo.device.turnOn(int(light_id)) if want else indigo.device.turnOff(int(light_id))
         except Exception as e:
             self.logger.error(f"Could not switch the garage light: {e}")
+
+    def _apply_lamps(self, dev, state, props):
+        """Drive the house lamps that announce the door.
+
+        Ported from Garage_Door_Controller.py so the scripts can retire. Every
+        device here is optional — a plugin carrying one house's decoration is no
+        use to anyone else, so nothing fires unless it has been configured.
+        """
+        hall_id = props.get("hallLampId")
+        cons_id = props.get("conservatoryId")
+        if not hall_id and not cons_id:
+            return
+
+        ref_id = props.get("restoreReferenceId")
+        ref_on = None
+        if ref_id:
+            ref_on = self._state_of(ref_id, "onState")
+        plan = G.lamp_plan(state, G.as_reed(ref_on), props)
+
+        if self._shadow_mode():
+            self.logger.debug(f"[shadow] would set lamps: {plan}")
+            return
+
+        want = plan.get("hall")
+        if hall_id and want:
+            try:
+                lamp = indigo.devices[int(hall_id)]
+                if want == G.HALL_OFF:
+                    indigo.device.turnOff(lamp)
+                else:
+                    key = {G.HALL_MOVING: "hallColourMoving",
+                           G.HALL_OPEN:   "hallColourOpen",
+                           G.HALL_RESTORE: "hallColourRestore"}[want]
+                    r, g, b = G.parse_rgb(props.get(key), _LAMP_FALLBACK[want])
+                    kw = {"redLevel": r, "greenLevel": g, "blueLevel": b}
+                    if want == G.HALL_RESTORE:
+                        try:
+                            wt = int(props.get("hallRestoreWhiteTemp") or 3000)
+                            kw["whiteTemperature"] = wt
+                        except (TypeError, ValueError):
+                            pass
+                    indigo.dimmer.setColorLevels(lamp, **kw)
+                    indigo.dimmer.setBrightness(lamp, 100)
+            except Exception as e:
+                self.logger.error(f"Hall lamp: {e}")
+
+        want_c = plan.get("conservatory")
+        if cons_id and want_c is not None:
+            try:
+                indigo.device.turnOn(int(cons_id)) if want_c else indigo.device.turnOff(int(cons_id))
+            except Exception as e:
+                self.logger.error(f"Conservatory lamp: {e}")
 
     def _mirror_homekit(self, dev, state, props):
         var = props.get("homekitVariable")

@@ -248,3 +248,58 @@ def test_the_message_says_what_is_wrong():
 
 def test_a_freshly_opened_door_does_not_claim_zero_minutes():
     assert "minutes" not in g.describe(g.OPEN, open_minutes=0)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Lamp signalling — ported from the retired controller script
+# ══════════════════════════════════════════════════════════════════════
+
+def test_moving_signals_on_the_hall_lamp_only():
+    """The conservatory must not flicker on every pass of the door."""
+    assert g.lamp_plan(g.MOVING) == {"hall": g.HALL_MOVING, "conservatory": None}
+
+
+def test_open_lights_both():
+    assert g.lamp_plan(g.OPEN) == {"hall": g.HALL_OPEN, "conservatory": True}
+
+
+def test_closing_restores_to_the_reference_lamp():
+    assert g.lamp_plan(g.CLOSED, restore_reference_on=True) == \
+        {"hall": g.HALL_RESTORE, "conservatory": True}
+    assert g.lamp_plan(g.CLOSED, restore_reference_on=False) == \
+        {"hall": g.HALL_OFF, "conservatory": False}
+
+
+def test_closing_with_no_reference_turns_things_off():
+    """A shut door with nothing to restore to means off, not 'leave it on'."""
+    assert g.lamp_plan(g.CLOSED, restore_reference_on=None) == \
+        {"hall": g.HALL_OFF, "conservatory": False}
+
+
+def test_a_stuck_door_keeps_signalling():
+    """It should not look tidy while it is jammed part-way."""
+    assert g.lamp_plan(g.STUCK)["hall"] == g.HALL_MOVING
+
+
+def test_lamps_can_be_switched_off_entirely():
+    assert g.lamp_plan(g.OPEN, cfg={"lampsFollowDoor": False}) == \
+        {"hall": None, "conservatory": None}
+
+
+@pytest.mark.parametrize("text, want", [
+    ("100,0,0",    (100, 0, 0)),
+    (" 0 , 0 ,100", (0, 0, 100)),
+    ("0;0;100",    (0, 0, 100)),
+])
+def test_colour_fields_are_read_forgivingly(text, want):
+    assert g.parse_rgb(text) == want
+
+
+@pytest.mark.parametrize("junk", ["", None, "red", "1,2", "a,b,c"])
+def test_a_junk_colour_field_falls_back_rather_than_raising(junk):
+    """Config fields are free text. Nothing here may throw at 3am."""
+    assert g.parse_rgb(junk, default=(1, 2, 3)) == (1, 2, 3)
+
+
+def test_colour_values_are_clamped_to_range():
+    assert g.parse_rgb("999,-5,50") == (100, 0, 50)

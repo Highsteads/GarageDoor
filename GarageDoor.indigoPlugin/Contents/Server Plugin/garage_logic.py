@@ -36,6 +36,7 @@ DEFAULTS = {
     "lightOnlyIfDark":       True,
     "lightOnlyIfPresent":    True,
     "luxThreshold":          30,
+    "lampsFollowDoor":       True,
 }
 
 
@@ -210,6 +211,73 @@ def light_decision(state, present, lux, cfg=None):
             return None
 
     return True
+
+
+# ── lamp signalling ──────────────────────────────────────────────────────
+# The house lamps that announce the door: blue while it moves, red while it is
+# open, and on closing they go back to matching a reference lamp elsewhere in
+# the house. Ported from Garage_Door_Controller.py so the scripts can retire.
+#
+# Every part is optional. A plugin that carries one house's decoration is no
+# use to anyone else, so nothing here fires unless the devices are configured,
+# and "no opinion" is a first-class answer.
+
+HALL_MOVING  = "moving"
+HALL_OPEN    = "open"
+HALL_RESTORE = "restore"
+HALL_OFF     = "off"
+
+
+def lamp_plan(state, restore_reference_on=None, cfg=None):
+    """What the lamps should do for a given door state.
+
+    Returns {"hall": <HALL_* or None>, "conservatory": True/False/None}, where
+    None means leave it alone. Pure — the plugin turns this into commands.
+    """
+    if not cfg_get(cfg, "lampsFollowDoor"):
+        return {"hall": None, "conservatory": None}
+
+    if state in (MOVING, UNKNOWN):
+        # Moving is a transient. Say so on the hall lamp and touch nothing else,
+        # or the conservatory flickers on every pass of the door.
+        return {"hall": HALL_MOVING, "conservatory": None}
+
+    if state == OPEN:
+        return {"hall": HALL_OPEN, "conservatory": True}
+
+    if state == CLOSED:
+        # Closing restores the house to whatever the reference lamp says. With
+        # no reference configured, "off" is the sane reading of a shut door.
+        if restore_reference_on:
+            return {"hall": HALL_RESTORE, "conservatory": True}
+        return {"hall": HALL_OFF, "conservatory": False}
+
+    if state == STUCK:
+        # Leave the signal showing. A stuck door should not look tidy.
+        return {"hall": HALL_MOVING, "conservatory": None}
+
+    return {"hall": None, "conservatory": None}
+
+
+def parse_rgb(text, default=(100, 100, 100)):
+    """Read an "R,G,B" config field into three 0-100 ints.
+
+    Config fields are free text, so this has to survive anything: blanks,
+    spaces, too few values, junk, and numbers outside the range.
+    """
+    if text is None:
+        return default
+    parts = [p.strip() for p in str(text).replace(";", ",").split(",")]
+    parts = [p for p in parts if p != ""]
+    if len(parts) < 3:
+        return default
+    out = []
+    for p in parts[:3]:
+        try:
+            out.append(max(0, min(100, int(float(p)))))
+        except (TypeError, ValueError):
+            return default
+    return tuple(out)
 
 
 def homekit_value(state, invert=True):

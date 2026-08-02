@@ -74,6 +74,8 @@ a device or variable you already have.
 
 ## Version history
 
+**1.1** (02-Aug-2026) — Takes over the house lamps that announce the door, so the scripts that used to do it can retire. Blue while it moves, red while it is open, and on closing they go back to matching a reference lamp elsewhere in the house. Every part is optional and every colour is a setting — leave the devices blank and none of it happens.
+
 **1.0** (02-Aug-2026) — First release. Door state from two position sensors, escalating
 presence-aware open alarm, seven events, open/close/toggle actions, optional garage light and
 HomeKit mirror. Ships in Shadow Mode.

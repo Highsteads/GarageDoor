@@ -84,6 +84,38 @@
                 <Label>Dark below (lux):</Label>
             </Field>
 
+            <Field id="sep5" type="separator"/>
+            <Field id="lbl_lamps" type="label">
+                <Label>Optional: house lamps that announce the door — blue while it moves, red while it is open, and back to matching a reference lamp when it closes. Leave the devices blank and none of this happens.</Label>
+            </Field>
+            <Field id="lampsFollowDoor" type="checkbox" defaultValue="true">
+                <Label>Let the lamps follow the door</Label>
+            </Field>
+            <Field id="hallLampId" type="menu">
+                <Label>Signal lamp (colour-capable):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="hallColourMoving" type="textfield" defaultValue="0,0,100">
+                <Label>Colour while moving (R,G,B 0-100):</Label>
+            </Field>
+            <Field id="hallColourOpen" type="textfield" defaultValue="100,0,0">
+                <Label>Colour while open (R,G,B 0-100):</Label>
+            </Field>
+            <Field id="hallColourRestore" type="textfield" defaultValue="100,100,100">
+                <Label>Colour when restored on closing (R,G,B 0-100):</Label>
+            </Field>
+            <Field id="hallRestoreWhiteTemp" type="textfield" defaultValue="3000">
+                <Label>White temperature when restored (K):</Label>
+            </Field>
+            <Field id="conservatoryId" type="menu">
+                <Label>Second lamp, on/off only (optional):</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+            <Field id="restoreReferenceId" type="menu">
+                <Label>On closing, match this lamp's on/off state:</Label>
+                <List class="indigo.devices" filter="" method="getDeviceList"/>
+            </Field>
+
             <Field id="sep4" type="separator"/>
             <Field id="homekitVariable" type="textfield" defaultValue="">
                 <Label>HomeKit mirror variable name (optional):</Label>
