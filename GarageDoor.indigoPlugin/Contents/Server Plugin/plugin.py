@@ -6,7 +6,7 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Opus 5
 # Date:        02-08-2026
-# Version:     1.5
+# Version:     1.6
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
@@ -79,6 +79,9 @@ class Plugin(indigo.PluginBase):
         self.doors = {}
         self.event_triggers = {}
         self._watched = {}          # contact device id -> set of door device ids
+        # Config warnings already given, for a door with no runtime state yet.
+        # Per-door warnings live on the door's own entry in self.doors.
+        self._warned_no_state = set()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -358,6 +361,20 @@ class Plugin(indigo.PluginBase):
     # Things that follow the door
     # ------------------------------------------------------------------
 
+    def _warn_once(self, dev, key, message):
+        """Say a configuration problem ONCE per plugin run, not on every close.
+
+        Once per run rather than once ever: if it is still broken after a
+        restart it is still worth saying, and a warning nobody ever sees again
+        is how a silent fault stays silent.
+        """
+        st = self.doors.get(dev.id)
+        seen = st.setdefault("warned", set()) if st is not None else self._warned_no_state
+        if key in seen:
+            return
+        seen.add(key)
+        self.logger.warning(f"{dev.name}: {message}")
+
     def _apply_light(self, dev, state, props):
         light_id = props.get("garageLightId")
         if not light_id:
@@ -394,11 +411,28 @@ class Plugin(indigo.PluginBase):
         if not hall_id and not cons_id:
             return
 
+        # Three cases, not two. No reference configured is a shut door with
+        # nothing to restore to, so lamps off. A reference that reads is its own
+        # answer. A reference that is CONFIGURED and cannot be read is neither —
+        # and used to fall through to "off", which is how the restore branch
+        # here had never once run on the install this was found on: the
+        # reference still named a lamp that had been retired months earlier, so
+        # every close switched the hall and conservatory lamps off instead.
+        # Nothing was logged, because a missing device and a lamp that is off
+        # are the same `None` to _state_of.
         ref_id = props.get("restoreReferenceId")
-        ref_on = None
-        if ref_id:
-            ref_on = self._state_of(ref_id, "onState")
-        plan = G.lamp_plan(state, G.as_reed(ref_on), props)
+        if not ref_id:
+            ref_on = None                       # nothing configured
+        else:
+            ref_on = G.as_reed(self._state_of(ref_id, "onState"))
+            if ref_on is None:
+                ref_on = G.REF_UNKNOWN
+                self._warn_once(dev, "restore_ref",
+                                f"the restore reference (device {ref_id}) cannot be read — "
+                                f"it may have been deleted. Leaving the hall and conservatory "
+                                f"lamps alone on close until it is fixed or cleared in the "
+                                f"door's settings.")
+        plan = G.lamp_plan(state, ref_on, props)
 
         if self._shadow_mode():
             self.logger.debug(f"[shadow] would set lamps: {plan}")

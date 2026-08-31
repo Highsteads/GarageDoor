@@ -73,6 +73,10 @@ a device or variable you already have.
 
 ## Version history
 
+**1.6** (31-Aug-2026) — **Closing the door was switching the hall and conservatory lamps off when it had no business deciding.** The lamps are meant to go back to how the house had them, judged by a reference lamp you nominate. That reference was pointing at a lamp taken out of the room in August, so it could not be read — and an unreadable reference was being treated as "the reference says off". Every close turned both lamps out, and the restore it was supposed to do had never once run. Nothing was logged either, because a lamp that is switched off and a lamp that no longer exists looked the same to the code.
+
+There are three answers now, not two. No reference set at all still means a shut door leaves the lamps off, which is what you would want. A reference that reads is obeyed. A reference that is set and cannot be read is neither — the lamps are left exactly as they are, and the log says once per start which device it cannot find, so the setting can be corrected or cleared.
+
 **1.5** (02-Aug-2026) — Fixes "Action has not been completely configured" on the door actions. Indigo marks an action step as configured when its dialog is completed, and 1.2 had removed the dialog altogether — so the step could never become configured and failed every time it ran. The dialog is back. It asks for nothing you need to fill in.
 
 **1.4** (02-Aug-2026) — The garage light follows the door and the light level by default. Presence-gating is still there as an option but it is now off: a light that waits until it is certain somebody is in the garage leaves you standing in the dark, which is not what a garage light is for.

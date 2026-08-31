@@ -99,11 +99,27 @@ def build_indigo():
 
     ind.PluginBase = PluginBase
 
+    # Indigo accepts EITHER a device id or a device object here, and the plugin
+    # uses both — the hall lamp is looked up first so it can take a colour, the
+    # conservatory is switched by id. A fake that only understood ids raised
+    # inside the plugin's own try/except and the failure came out as a logged
+    # error with the command simply missing.
+    def _ref(i):
+        return int(getattr(i, "id", i))
+
     dev_ns = types.SimpleNamespace(
-        turnOn=lambda i: ind.commands.append(("on", int(i))),
-        turnOff=lambda i: ind.commands.append(("off", int(i))),
+        turnOn=lambda i: ind.commands.append(("on", _ref(i))),
+        turnOff=lambda i: ind.commands.append(("off", _ref(i))),
     )
     ind.device = dev_ns
+    # The lamp signalling drives a dimmer. Without this the hall-lamp branch
+    # raises AttributeError, which no test noticed because none of them had a
+    # hall lamp configured.
+    ind.dimmer = types.SimpleNamespace(
+        setColorLevels=lambda d, **kw: ind.commands.append(
+            ("color", getattr(d, "id", d), dict(kw))),
+        setBrightness=lambda d, value=None, **kw: ind.commands.append(
+            ("bright", getattr(d, "id", d), value)))
     ind.variable = types.SimpleNamespace(
         updateValue=lambda vid, val: ind.commands.append(("var", vid, val)))
     ind.trigger = types.SimpleNamespace(
@@ -341,3 +357,112 @@ def test_the_light_is_not_commanded_over_and_over(plugin):
         p._evaluate(door.id)
     light = [c for c in ind.commands if c[1] == 104]
     assert len(light) <= 1, f"light commanded {len(light)} times for one state"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Restore reference — configured but unreadable is NOT "off" (v1.6.0)
+# ══════════════════════════════════════════════════════════════════════
+#
+# Found live 31-Aug-2026. The reference still pointed at the Gold Lamp, retired
+# 11-Aug-2026, so _state_of returned None for it, None fell through as falsy,
+# and every close switched the hall and conservatory lamps OFF. The restore
+# branch had never run once, and nothing was logged — a missing device and a
+# lamp that is off are the same None.
+
+def _lamp_door(ind, restore_ref):
+    """A door wired to both signalling lamps, with the given restore reference.
+
+    NB every caller must also switch shadow mode OFF (`_lamps_live`). The
+    fixture builds the plugin in shadow mode, where nothing is ever commanded —
+    so a test asserting "no lamp commands" passes there no matter what the code
+    does. That is exactly how the first draft of the unreadable-reference test
+    below passed while proving nothing.
+    """
+    d = FakeDevice(2, "Lamp Door", plugin_id="com.clives.indigoplugin.garagedoor",
+                   props={"bottomContactId": "101", "topContactId": "102",
+                          "relayId": "103",
+                          "hallLampId": "301", "conservatoryId": "302",
+                          "restoreReferenceId": restore_ref,
+                          "lampsFollowDoor": "true"})
+    ind.devices.add(d)
+    return d
+
+
+def _lamp_commands(ind):
+    return [c for c in ind.commands if len(c) > 1 and c[1] in (301, 302)]
+
+
+def _lamps_live(p, ind):
+    """Shadow mode off, and prove the harness CAN record a lamp command."""
+    p.pluginPrefs["shadowMode"] = "false"
+    ind.commands.clear()
+
+
+def test_an_unreadable_restore_reference_leaves_the_lamps_alone(plugin):
+    """The live bug. A reference pointing at a deleted device must not read as
+    "the reference says off" — that switches lamps out from under somebody on
+    the strength of a reading that never arrived."""
+    p, ind, _, _ = plugin
+    _lamps_live(p, ind)
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": True}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    door = _lamp_door(ind, "999999")          # no such device
+    p.startup()
+    p.deviceStartComm(door)                   # contacts say closed
+    assert door.states["doorState"] == "closed"
+    assert _lamp_commands(ind) == [], "a shut door must not touch the lamps when it cannot tell"
+
+
+def test_an_unreadable_reference_is_warned_about_once(plugin):
+    p, ind, _, _ = plugin
+    _lamps_live(p, ind)
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": True}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    door = _lamp_door(ind, "999999")
+    said = []
+    p.logger.warning = lambda m, *a, **k: said.append(str(m))
+    p.startup()
+    p.deviceStartComm(door)
+    p._apply_lamps(door, "closed", dict(door.pluginProps))
+    p._apply_lamps(door, "closed", dict(door.pluginProps))
+    hits = [m for m in said if "restore reference" in m]
+    assert len(hits) == 1, f"expected exactly one warning, got {said}"
+    assert "999999" in hits[0] and "cannot be read" in hits[0]
+
+
+def test_no_reference_configured_still_turns_the_lamps_off(plugin):
+    """Unchanged behaviour: nothing to restore to means a shut door is dark.
+    This is the case the fix must NOT break."""
+    p, ind, _, _ = plugin
+    _lamps_live(p, ind)
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": True}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    door = _lamp_door(ind, "")
+    p.startup()
+    p.deviceStartComm(door)
+    assert ("off", 301) in ind.commands and ("off", 302) in ind.commands
+
+
+def test_a_readable_reference_that_is_on_restores(plugin):
+    p, ind, _, _ = plugin
+    _lamps_live(p, ind)
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": False}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": False}))
+    ind.devices.add(FakeDevice(303, "Reference Lamp", {"onState": True}))
+    door = _lamp_door(ind, "303")
+    p.startup()
+    p.deviceStartComm(door)
+    assert ("on", 302) in ind.commands, "the conservatory should come back on"
+    assert any(c[0] == "color" and c[1] == 301 for c in ind.commands), "the hall lamp should restore"
+
+
+def test_a_readable_reference_that_is_off_turns_them_off(plugin):
+    p, ind, _, _ = plugin
+    _lamps_live(p, ind)
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": True}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    ind.devices.add(FakeDevice(303, "Reference Lamp", {"onState": False}))
+    door = _lamp_door(ind, "303")
+    p.startup()
+    p.deviceStartComm(door)
+    assert ("off", 301) in ind.commands and ("off", 302) in ind.commands

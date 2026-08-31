@@ -320,3 +320,42 @@ def test_a_junk_colour_field_falls_back_rather_than_raising(junk):
 
 def test_colour_values_are_clamped_to_range():
     assert g.parse_rgb("999,-5,50") == (100, 0, 50)
+
+
+def test_a_configured_but_unreadable_reference_is_not_off():
+    """The live fault, 31-Aug-2026: the reference still pointed at the Gold Lamp,
+    retired 11-Aug. _state_of returned None, None was falsy, and every close
+    switched the hall and conservatory lamps off — the restore branch had never
+    run once. Unreadable is its own answer: touch nothing."""
+    assert g.lamp_plan(g.CLOSED, restore_reference_on=g.REF_UNKNOWN) == \
+        {"hall": None, "conservatory": None}
+
+
+def test_unknown_reference_only_changes_the_closed_answer():
+    """It must not leak into the other states — an open door still signals."""
+    assert g.lamp_plan(g.OPEN, restore_reference_on=g.REF_UNKNOWN) == \
+        {"hall": g.HALL_OPEN, "conservatory": True}
+    assert g.lamp_plan(g.MOVING, restore_reference_on=g.REF_UNKNOWN)["hall"] == g.HALL_MOVING
+    assert g.lamp_plan(g.STUCK, restore_reference_on=g.REF_UNKNOWN)["hall"] == g.HALL_MOVING
+
+
+def test_the_unknown_sentinel_is_falsy():
+    """A safety net, not decoration. Any path not taught about this value keeps
+    the OLD behaviour (lamps off) rather than wrongly restoring."""
+    assert not g.REF_UNKNOWN
+    assert g.REF_UNKNOWN is not None and g.REF_UNKNOWN is not False
+
+
+def test_the_three_reference_answers_stay_distinct():
+    """None, False and REF_UNKNOWN must not collapse into each other — that
+    collapse IS the bug."""
+    outcomes = {
+        "none":    tuple(g.lamp_plan(g.CLOSED, restore_reference_on=None).items()),
+        "off":     tuple(g.lamp_plan(g.CLOSED, restore_reference_on=False).items()),
+        "on":      tuple(g.lamp_plan(g.CLOSED, restore_reference_on=True).items()),
+        "unknown": tuple(g.lamp_plan(g.CLOSED, restore_reference_on=g.REF_UNKNOWN).items()),
+    }
+    # none and off deliberately AGREE (nothing to restore to = a dark shut door).
+    assert outcomes["none"] == outcomes["off"]
+    assert outcomes["unknown"] != outcomes["off"]
+    assert outcomes["unknown"] != outcomes["on"]

@@ -5,8 +5,13 @@
 #              Indigo import — the door's state, when to raise the alarm, when
 #              to light the garage, and what to publish for HomeKit.
 # Author:      CliveS & Claude Opus 5
-# Date:        02-08-2026
-# Version:     1.0
+# Date:        31-08-2026
+# Version:     1.1
+#
+# v1.1 (31-08-2026): REF_UNKNOWN — a restore reference that is configured but
+# cannot be read is its own answer, not "off". Found live, where the reference
+# still named a lamp retired months earlier: every close turned the hall and
+# conservatory lamps off, and the restore branch had never once run.
 #
 # WHY THIS FILE EXISTS SEPARATELY
 # The plugin around it is plumbing: read a device, write a state, fire an event.
@@ -230,6 +235,33 @@ HALL_RESTORE = "restore"
 HALL_OFF     = "off"
 
 
+class _RefUnknown:
+    """A restore reference IS configured, and could not be read.
+
+    This has to be its own value because the two states it sits between are
+    already spoken for: None means "no reference configured at all", which is
+    a shut door with nothing to restore to and therefore lamps off; False
+    means "the reference is there and it says off", same answer by a different
+    route. A configured reference pointing at a device that has been deleted,
+    renamed away or never reports gives NEITHER answer, and treating it as
+    off is how the lamps get switched out from under somebody.
+
+    Falsy on purpose: any path that has not been taught about this value
+    behaves exactly as it did before rather than wrongly restoring.
+    """
+
+    __slots__ = ()
+
+    def __bool__(self):
+        return False
+
+    def __repr__(self):
+        return "REF_UNKNOWN"
+
+
+REF_UNKNOWN = _RefUnknown()
+
+
 def lamp_plan(state, restore_reference_on=None, cfg=None):
     """What the lamps should do for a given door state.
 
@@ -250,6 +282,13 @@ def lamp_plan(state, restore_reference_on=None, cfg=None):
     if state == CLOSED:
         # Closing restores the house to whatever the reference lamp says. With
         # no reference configured, "off" is the sane reading of a shut door.
+        if restore_reference_on is REF_UNKNOWN:
+            # A reference was configured and could not be read — the device has
+            # been deleted, or has never reported. That is not the same as the
+            # reference saying "off", and acting on it switches lamps out from
+            # under somebody on the word of a reading we never got. Leave both
+            # alone and let the plugin say so in the log.
+            return {"hall": None, "conservatory": None}
         if restore_reference_on:
             return {"hall": HALL_RESTORE, "conservatory": True}
         return {"hall": HALL_OFF, "conservatory": False}
