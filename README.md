@@ -1,5 +1,7 @@
 # Garage Door
 
+**Version:** 1.6 | **Author:** CliveS & Claude | **Platform:** Indigo 2025.2 or later
+
 One Indigo device that owns your garage door — where it actually is, how long it has been open,
 the alarm when it has been left that way, and the light that follows whoever walked in.
 
