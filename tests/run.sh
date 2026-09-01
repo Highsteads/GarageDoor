@@ -28,7 +28,11 @@ done
 
 echo
 echo "== lint (errors only) =="
-python3 -m ruff check . && echo "  ok"
+# NOT `ruff check . && echo ok` — `set -e` does not fire on the left-hand side
+# of `&&`, so that form lets a lint failure through and the whole gate still
+# exits 0. Found 01-09-2026: this step had never been able to fail CI.
+python3 -m ruff check .
+echo "  ok"
 
 echo
 find GarageDoor.indigoPlugin -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
