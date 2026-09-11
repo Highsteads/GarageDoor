@@ -1,6 +1,6 @@
 # Garage Door
 
-**Version:** 1.6 | **Author:** CliveS & Claude | **Platform:** Indigo 2025.2 or later
+**Version:** 1.7 | **Author:** CliveS & Claude | **Platform:** Indigo 2025.2 or later
 
 One Indigo device that owns your garage door — where it actually is, how long it has been open,
 the alarm when it has been left that way, and the light that follows whoever walked in.
@@ -74,6 +74,8 @@ Indigo 2025.2 or later. No external services, no credentials, nothing to install
 a device or variable you already have.
 
 ## Version history
+
+**1.7** (11-Sep-2026) — **The bundle now carries the standard GitHub record.** Indigo plugins can carry a small note inside the bundle saying where their source lives on GitHub, spelt the way the Indigo Domotics and community plugins spell it. This one now has it, pointing at this repository. Nothing else changed.
 
 **1.6** (31-Aug-2026) — **Closing the door was switching the hall and conservatory lamps off when it had no business deciding.** The lamps are meant to go back to how the house had them, judged by a reference lamp you nominate. That reference was pointing at a lamp taken out of the room in August, so it could not be read — and an unreadable reference was being treated as "the reference says off". Every close turned both lamps out, and the restore it was supposed to do had never once run. Nothing was logged either, because a lamp that is switched off and a lamp that no longer exists looked the same to the code.
 

@@ -4,9 +4,9 @@
 # Description: One Indigo device that owns the garage door — its real position,
 #              how long it has been open, the alarm when it is left that way,
 #              and the light that follows whoever walked in.
-# Author:      CliveS & Claude Opus 5
-# Date:        02-08-2026
-# Version:     1.6
+# Author:      CliveS & Claude Fable 5.1
+# Date:        11-09-2026
+# Version:     1.7
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
