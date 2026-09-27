@@ -359,3 +359,76 @@ def test_the_three_reference_answers_stay_distinct():
     assert outcomes["none"] == outcomes["off"]
     assert outcomes["unknown"] != outcomes["off"]
     assert outcomes["unknown"] != outcomes["on"]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.8 — settings that were stored and never read
+# ══════════════════════════════════════════════════════════════════════
+
+def test_the_pulse_length_setting_is_read():
+    """cfg_get had no default for it, returned None, and every press was 1 s."""
+    assert g.pulse_seconds({"pulseMilliseconds": "1500"}) == 1.5
+    assert g.pulse_seconds({"pulseMilliseconds": 250}) == 0.25
+    assert g.pulse_seconds({}) == 1.0
+
+
+@pytest.mark.parametrize("junk", ["", None, "abc", "0", "-200"])
+def test_a_useless_pulse_length_falls_back_to_one_second(junk):
+    assert g.pulse_seconds({"pulseMilliseconds": junk}) == 1.0
+
+
+def test_a_huge_pulse_length_is_capped():
+    assert g.pulse_seconds({"pulseMilliseconds": "600000"}) == g.PULSE_MAX_MS / 1000.0
+
+
+def test_the_repeat_press_window_is_read():
+    """Same fault: always 5 s, whatever was typed."""
+    assert g.debounce_seconds({"operationDebounceSeconds": "2"}) == 2
+    assert g.debounce_seconds({"operationDebounceSeconds": "0"}) == 0
+    assert g.debounce_seconds({"operationDebounceSeconds": "-3"}) == 0
+    assert g.debounce_seconds({}) == 5
+    assert g.debounce_seconds({"operationDebounceSeconds": "soon"}) == 5
+
+
+def test_a_decimal_lux_threshold_is_honoured():
+    """"12.5" went through int() and fell back to 30."""
+    assert g.cfg_get({"luxThreshold": "12.5"}, "luxThreshold") == 12.5
+    cfg = {"luxThreshold": "12.5"}
+    assert g.light_decision(g.OPEN, None, 12, cfg) is True
+    assert g.light_decision(g.OPEN, None, 13, cfg) is False
+
+
+@pytest.mark.parametrize("junk", ["nan", "inf", "abc"])
+def test_a_lux_threshold_that_is_not_a_number_falls_back(junk):
+    assert g.cfg_get({"luxThreshold": junk}, "luxThreshold") == 30
+
+
+@pytest.mark.parametrize("value, want", [
+    ("DEBUG", 10), ("INFO", 20), ("WARNING", 30), ("debug", 10),
+    ("", 20), (None, 20), ("wibble", 20), ("ERROR", 20), (40, 30), ("10", 10),
+])
+def test_the_logging_level_maps_and_never_hides_warnings(value, want):
+    assert g.log_level(value) == want
+
+
+def test_no_lux_sensor_uses_the_dark_variable():
+    """With no light-level sensor and "only when dark" ticked (the default),
+    the light used to go off on every close and never come on."""
+    assert g.light_decision(g.OPEN, None, None, dark=True, lux_configured=False) is True
+    assert g.light_decision(g.OPEN, None, None, dark="true", lux_configured=False) is True
+    assert g.light_decision(g.OPEN, None, None, dark=False, lux_configured=False) is False
+    assert g.light_decision(g.CLOSED, None, None, dark=True, lux_configured=False) is False
+
+
+def test_no_lux_sensor_and_no_dark_reading_lights_it_whenever_it_opens():
+    assert g.light_decision(g.OPEN, None, None, dark=None, lux_configured=False) is True
+
+
+def test_a_configured_but_silent_lux_sensor_still_leaves_the_light_alone():
+    """The fallback is for NO sensor. A sensor that has gone quiet is a gap."""
+    assert g.light_decision(g.OPEN, None, None, dark=True, lux_configured=True) is None
+
+
+def test_presence_gating_still_applies_without_a_lux_sensor():
+    cfg = {"lightOnlyIfPresent": True}
+    assert g.light_decision(g.OPEN, False, None, cfg, dark=True, lux_configured=False) is False

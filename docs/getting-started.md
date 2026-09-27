@@ -47,7 +47,7 @@ The [Shadow Mode](shadow-mode.md) page explains how to hand over when you are re
 
 ## 4. Check it works
 
-Choose **Plugins → Garage Door → Test Garage Door Setup**. The Event Log shows each sensor, relay and variable you have picked, with **PASS** if the plugin can read it and **FAIL** if it cannot, then where the door is now.
+Choose **Plugins → Garage Door → Test Garage Door Setup**. The Event Log shows each sensor, relay, lamp and variable you have picked, with **PASS** if the plugin can read it and **FAIL** if it cannot, then where the door is now.
 
 The new device in the device list should show **Closed** or **Open** to match the real door. Open and close the door the way you usually do, and each time the Event Log should have a line saying the door is moving, then open or closed.
 

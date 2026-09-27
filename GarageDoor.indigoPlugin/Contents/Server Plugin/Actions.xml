@@ -65,10 +65,10 @@
         <CallbackMethod>actionRefreshState</CallbackMethod>
         <ConfigUI>
             <Field id="lbl" type="label">
-                <Label>Nothing to set — this action operates the door you pick above. Click OK to save it.</Label>
+                <Label>Nothing to set — this action re-reads the door you pick above. It never presses the relay. Click OK to save it.</Label>
             </Field>
             <Field id="source" type="textfield" defaultValue="">
-                <Label>Optional note, shown in the device's "Last operated by":</Label>
+                <Label>Optional note, added to the Event Log line:</Label>
             </Field>
         </ConfigUI>
     </Action>

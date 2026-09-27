@@ -52,7 +52,9 @@ If you pick a garage light in the door's settings, the plugin switches it, unles
 
 If you tick **Only light it if somebody is actually in there**, the presence sensor must also show somebody, and the light goes off when it shows nobody. That is off to start with, because a presence sensor can be slow to notice someone, and a garage light that waits leaves you standing in the dark.
 
-If the plugin has no reading to go on — no light-level sensor when **Only light it when it is dark** is ticked, or no presence sensor when **Only light it if somebody is actually in there** is ticked — it leaves the light as it is. So if you have no light-level sensor, untick **Only light it when it is dark**, or the light will be switched off when the door closes but never on.
+If you have no light-level sensor, the plugin judges "dark" by the variable you named in **"Dark" variable name**: the light comes on when it is **true** and stays off when it is **false**. If there is no such variable, the light comes on whenever the door opens, and if you named one the plugin cannot find, the Event Log says so once each time the plugin starts.
+
+If you have picked a light-level sensor or a presence sensor and it has stopped giving a reading, the plugin leaves the light as it is rather than guess.
 
 The plugin checks the light every second, but only sends a command when its answer changes, so if you switch the light by hand it stays as you left it until the door or the light level changes the answer.
 

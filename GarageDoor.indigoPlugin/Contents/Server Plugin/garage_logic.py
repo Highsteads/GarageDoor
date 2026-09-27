@@ -6,7 +6,13 @@
 #              to light the garage, and what to publish for HomeKit.
 # Author:      CliveS & Claude Opus 5
 # Date:        31-08-2026
-# Version:     1.1
+# Version:     1.2
+#
+# v1.2 (27-09-2026): the pulse length and repeat-press window are now real
+# DEFAULTS, so cfg_get reads them instead of returning None; the lux threshold
+# is a float so "12.5" is honoured; log_level() for the Logging level pref; and
+# light_decision can judge "dark" from the Dark variable when there is no
+# light-level sensor, instead of never lighting the garage at all.
 #
 # v1.1 (31-08-2026): REF_UNKNOWN — a restore reference that is configured but
 # cannot be read is its own answer, not "off". Found live, where the reference
@@ -18,6 +24,8 @@
 # Everything that could be WRONG lives here, and none of it needs Indigo, a
 # radio or a door. tests/test_garage_logic.py drives these functions directly,
 # so the tests exercise what actually ships rather than a copy of it.
+
+import math
 
 # ── door states ──────────────────────────────────────────────────────────
 CLOSED  = "closed"
@@ -40,9 +48,15 @@ DEFAULTS = {
     "urgentWhenDark":        True,
     "lightOnlyIfDark":       True,
     "lightOnlyIfPresent":    False,
-    "luxThreshold":          30,
+    "luxThreshold":          30.0,   # float: "12.5" is a fair thing to type
     "lampsFollowDoor":       True,
+    # These two were read through cfg_get but missing here, so it returned None
+    # for any value and the callers' `or` fell back to 1 s and 5 s every time.
+    "pulseMilliseconds":        1000,
+    "operationDebounceSeconds": 5,
 }
+
+PULSE_MAX_MS = 10000    # a momentary press, never a held button
 
 
 def cfg_get(cfg, key):
@@ -59,9 +73,52 @@ def cfg_get(cfg, key):
     if isinstance(default, bool):
         return as_bool(raw, default)
     try:
-        return type(default)(raw)
+        value = type(default)(raw)
     except (TypeError, ValueError):
         return default
+    if isinstance(value, float) and not math.isfinite(value):
+        return default                  # "nan" and "inf" parse, and mean nothing
+    return value
+
+
+def pulse_seconds(cfg):
+    """How long to hold the relay for one press, in seconds.
+
+    Zero or less would be no press at all, so it falls back to the default.
+    Anything past PULSE_MAX_MS is capped: a garage opener wants a press, and a
+    relay held on for minutes is a fault, not a setting.
+    """
+    ms = cfg_get(cfg, "pulseMilliseconds")
+    if ms <= 0:
+        ms = DEFAULTS["pulseMilliseconds"]
+    return min(ms, PULSE_MAX_MS) / 1000.0
+
+
+def debounce_seconds(cfg):
+    """How soon after one press another is ignored. 0 turns the check off."""
+    return max(0, cfg_get(cfg, "operationDebounceSeconds"))
+
+
+_LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30}
+
+
+def log_level(value):
+    """The Logging level pref as a logging int, for the Event Log handler.
+
+    Capped at WARNING: faults must always reach the Event Log, whatever the
+    menu says. Blank or unrecognised is INFO, the shipped default.
+    """
+    if isinstance(value, bool):
+        return 20
+    if isinstance(value, (int, float)):
+        return max(10, min(30, int(value)))
+    s = str(value or "").strip().upper()
+    if s in _LOG_LEVELS:
+        return _LOG_LEVELS[s]
+    try:
+        return max(10, min(30, int(s)))
+    except ValueError:
+        return 20
 
 
 def as_bool(value, default=False):
@@ -188,13 +245,19 @@ def alarm_decision(state, open_minutes, away, night, cfg=None,
     return level, False
 
 
-def light_decision(state, present, lux, cfg=None):
+def light_decision(state, present, lux, cfg=None, dark=None, lux_configured=True):
     """Should the garage light be on?
 
     On when the door is not shut and it is dark enough to want it, off the
     moment the door closes. Presence-gating is available but OFF by default:
     a light that waits until it is certain somebody is in the garage leaves
     you standing in the dark, which is not what a garage light is for.
+
+    With no light-level sensor configured (lux_configured False), "dark" comes
+    from the Dark variable instead (`dark`: True, False or None). If that
+    cannot be read either, there is nothing to judge darkness by, so the light
+    comes on whenever the door opens. Until v1.8 this case returned None, and
+    the light was switched off on every close but never on.
 
     Returns True (on), False (off), or None (no opinion — leave it alone).
     """
@@ -208,7 +271,11 @@ def light_decision(state, present, lux, cfg=None):
         if not p:
             return False
 
-    if cfg_get(cfg, "lightOnlyIfDark"):
+    if cfg_get(cfg, "lightOnlyIfDark") and not lux_configured:
+        if as_reed(dark) is False:
+            return False                   # the Dark variable says it is light
+    elif cfg_get(cfg, "lightOnlyIfDark"):
+        # A sensor IS configured: a missing reading is a gap, not an answer.
         if lux is None or lux == "":
             return None                # no lux reading: do not guess
         try:

@@ -14,7 +14,7 @@ Open these with **Plugins → Garage Door → Configure**. They apply to every d
 | Setting | What it does |
 |---|---|
 | **Shadow Mode — watch and report, do not operate the door** | Ticked to start with. While it is ticked the plugin never presses the relay, switches the garage light or changes the lamps, as the [Shadow Mode](shadow-mode.md) page explains. A change takes effect as soon as you click **Save**. |
-| **Logging level** | Debug, Info or Warning. In version 1.7 the plugin does not read this setting, so changing it makes no difference to what is logged. |
+| **Logging level** | Debug, Info or Warning. Info to start with. Debug adds the plugin's working notes to the Event Log, and Warning leaves only warnings and errors there. The plugin's own log file keeps everything whatever you pick. A change takes effect as soon as you click **Save**. |
 
 ## Each door's settings
 
@@ -34,9 +34,9 @@ Both are needed. Until they are picked, the Event Log says the door is not confi
 | Setting | What it does |
 |---|---|
 | **Door relay (momentary)** | The relay that presses your opener's button. Without one the door can be watched but not worked. |
-| **Pulse length (ms)** | Meant to set how long the relay stays on for each press, in thousandths of a second. In version 1.7 the plugin does not read this box, and every press lasts one second. |
+| **Pulse length (ms)** | How long the relay stays on for each press, in thousandths of a second. 1000, one second, to start with. A blank box or 0 means one second, and anything over 10000 is cut to ten seconds, because an opener wants a press, not a held button. |
 | **Travel timeout (s) — longer than this and it is stuck** | How many seconds the door may spend between the two ends before it counts as stuck. 30 to start with. Set it a little longer than your door takes to open or close. |
-| **Ignore repeat operations within (s)** | Meant to set how soon after one press another is ignored. In version 1.7 the plugin does not read this box, and a second press within five seconds is always ignored. |
+| **Ignore repeat operations within (s)** | How many seconds after one press another is ignored, so a double tap on a button does not stop the door half-way. 5 to start with. 0 lets every press through. |
 
 ### The alarm
 
@@ -60,8 +60,8 @@ A blank or unreadable number in any of these boxes falls back to the figure it s
 | **Garage light (optional)** | The light to switch. Leave it blank and the plugin leaves your garage light alone. |
 | **Light-level sensor (optional)** | A sensor that measures light in lux, used to tell whether it is dark. |
 | **Only light it if somebody is actually in there** | Unticked to start with. Ticked, the light only comes on when the presence sensor shows somebody. |
-| **Only light it when it is dark** | Ticked to start with. The light only comes on when the light-level sensor reads at or below the figure below. Untick it if you have no light-level sensor, or the light never comes on. |
-| **Dark below (lux)** | The light level, as a whole number, at or below which it counts as dark. 30 to start with. |
+| **Only light it when it is dark** | Ticked to start with. The light only comes on when the light-level sensor reads at or below the figure below. If you have no light-level sensor, the plugin goes by the **"Dark" variable** instead, and if it cannot read that either, the light comes on whenever the door opens. |
+| **Dark below (lux)** | The light level at or below which it counts as dark. 30 to start with. A figure such as 12.5 works too. |
 
 The [How it works](how-it-works.md) page explains exactly when the light is switched.
 

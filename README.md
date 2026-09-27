@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.7 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.8 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -50,9 +50,9 @@ The [full guide](https://highsteads.github.io/GarageDoor/) goes through each ste
 
 ## What's new
 
-**v1.7** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
+**v1.8** — Pulse length, the repeat-press window and the logging level now do what they say, and the garage light comes on without a light-level sensor, going by your "Dark" variable instead. Test Garage Door Setup now checks the lamps too.
 
-**v1.6** — Closing the door no longer switches the house lamps off when the reference lamp cannot be read. The lamps are left as they are, and the Event Log says which device is missing.
+**v1.7** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
 
 Every version is listed in the [version history](https://highsteads.github.io/GarageDoor/changelog.html).
 

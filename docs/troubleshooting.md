@@ -27,7 +27,7 @@ The door took longer than the travel timeout to get from one end to the other. L
 ## Nothing happens when I open or close the door from Indigo
 
 - If the Event Log has a line marked `[shadow]` saying the plugin would have pulsed the relay, Shadow Mode is on. The [Shadow Mode](shadow-mode.md) page explains when and how to turn it off.
-- If it says **ignoring a repeat operation**, two presses came within five seconds, and the second was ignored on purpose.
+- If it says **ignoring a repeat operation**, two presses came closer together than **Ignore repeat operations within (s)**, five seconds to start with, and the second was ignored on purpose.
 - If it says **already open, nothing to do** or **already closed, nothing to do**, the plugin believes the door is already there. Check the door device shows the right position.
 - If it says **no relay configured**, pick the relay in the door's settings.
 - If it says **relay pulse failed**, the relay device could not be switched. Check the relay works from Indigo on its own.
@@ -35,7 +35,8 @@ The door took longer than the travel timeout to get from one end to the other. L
 ## The garage light does not come on
 
 - Check you have picked a **Garage light** in the door's settings, and that Shadow Mode is off.
-- If **Only light it when it is dark** is ticked, you need a **Light-level sensor**, and it must read at or below **Dark below (lux)**. Without a reading, the plugin leaves the light alone. Untick it if you have no such sensor.
+- If **Only light it when it is dark** is ticked and you have a **Light-level sensor**, it must read at or below **Dark below (lux)**. If the sensor has stopped giving a reading, the plugin leaves the light alone.
+- With no light-level sensor, the plugin goes by the **"Dark" variable**, so the light stays off while that variable is **false**.
 - If **Only light it if somebody is actually in there** is ticked, the presence sensor must show somebody. Try unticking it.
 
 ## The lamps in the house stay as they were when the door closes

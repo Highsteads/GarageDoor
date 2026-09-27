@@ -7,6 +7,18 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.8 — 27 September 2026
+
+Several settings did nothing, and now they do what they say.
+
+- **Pulse length (ms)** now sets how long each press lasts. Before, every press lasted one second whatever the box said. Anything over ten seconds is cut to ten.
+- **Ignore repeat operations within (s)** now sets how soon a second press is ignored. Before, it was always five seconds, and 0 now lets every press through.
+- **Logging level** now decides how much reaches the Event Log. Before, it made no difference.
+- **Dark below (lux)** takes a figure such as 12.5. Before, anything with a decimal point was quietly read as 30.
+- The note on **Pulse Relay (diagnostic)** now shows in **Last operated by**, and the note on **Re-read Door State** goes into its Event Log line. Both used to be thrown away.
+- **The garage light now comes on without a light-level sensor.** With **Only light it when it is dark** ticked, which it is to start with, and no sensor to say how dark it was, the light went off every time the door closed and never came on. Now the plugin goes by your "Dark" variable instead, and if it cannot read one, the light comes on whenever the door opens.
+- **Test Garage Door Setup** now checks the signal lamp, the second lamp and the reference lamp, as well as everything it checked before.
+
 ## 1.7 — 11 September 2026
 
 The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.

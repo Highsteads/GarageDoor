@@ -466,3 +466,161 @@ def test_a_readable_reference_that_is_off_turns_them_off(plugin):
     p.startup()
     p.deviceStartComm(door)
     assert ("off", 301) in ind.commands and ("off", 302) in ind.commands
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.8 — settings and notes that were ignored
+# ══════════════════════════════════════════════════════════════════════
+
+def _live(p, door):
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    p.deviceStartComm(door)
+
+
+def test_the_pulse_length_setting_decides_how_long_the_relay_is_held(plugin):
+    p, ind, door, _ = plugin
+    door.pluginProps["pulseMilliseconds"] = "1500"
+    slept = []
+    p.sleep = lambda s: slept.append(s)
+    _live(p, door)
+    ind.commands.clear()
+    p.actionToggleDoor(types.SimpleNamespace(deviceId=door.id, props={}))
+    assert slept == [1.5], slept
+    assert [c for c in ind.commands if c[1] == 103] == [("on", 103), ("off", 103)]
+
+
+def test_the_repeat_press_window_setting_is_honoured(plugin, monkeypatch):
+    p, ind, door, plugin_mod = plugin
+    door.pluginProps["operationDebounceSeconds"] = "1"
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(plugin_mod.time, "time", lambda: clock["t"])
+    _live(p, door)
+    ind.commands.clear()
+    a = types.SimpleNamespace(deviceId=door.id, props={})
+    p.actionToggleDoor(a)
+    clock["t"] += 0.5
+    p.actionToggleDoor(a)                     # inside 1 s: dropped
+    clock["t"] += 1.0
+    p.actionToggleDoor(a)                     # 1.5 s after the first: allowed
+    assert len([c for c in ind.commands if c == ("on", 103)]) == 2
+
+
+def test_the_logging_level_setting_reaches_the_event_log_handler(plugin):
+    import logging
+    p, _, _, _ = plugin
+    p.indigo_log_handler = logging.Handler()
+    p.pluginPrefs["logLevel"] = "WARNING"
+    p.startup()
+    assert p.indigo_log_handler.level == logging.WARNING
+    p.closedPrefsConfigUi({"logLevel": "DEBUG", "shadowMode": True}, False)
+    assert p.indigo_log_handler.level == logging.DEBUG
+
+
+def test_the_pulse_relay_note_is_shown_as_last_operated_by(plugin):
+    p, _, door, _ = plugin
+    _live(p, door)
+    p.actionPulseRelay(types.SimpleNamespace(deviceId=door.id, props={"source": "Bench test"}))
+    assert door.states["lastOperatedBy"] == "Bench test"
+
+
+def test_the_re_read_note_goes_into_the_log_line(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    said = []
+    p.logger.info = lambda m, *a, **k: said.append(str(m))
+    p.actionRefreshState(types.SimpleNamespace(deviceId=door.id, props={"source": "Hall panel"}))
+    assert any("Hall panel" in m and "closed" in m for m in said), said
+    assert [c for c in ind.commands if c[1] == 103] == []   # never the relay
+
+
+def _no_lux_door(ind, night_var):
+    d = FakeDevice(3, "No Lux Door", plugin_id="com.clives.indigoplugin.garagedoor",
+                   props={"bottomContactId": "101", "topContactId": "102",
+                          "relayId": "103", "garageLightId": "104",
+                          "luxSensorId": "", "nightVariable": night_var})
+    ind.devices.add(d)
+    return d
+
+
+def _open_it(p, ind, door):
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    p.deviceStartComm(door)
+    ind.commands.clear()
+    ind.devices[101].states["contact"] = False
+    ind.devices[102].states["contact"] = True
+    p._evaluate(door.id)
+
+
+def test_without_a_lux_sensor_the_light_comes_on_when_it_is_dark(plugin):
+    """The fault: "Only light it when it is dark" is ticked by default, and with
+    no light-level sensor the light went off on every close but never on."""
+    p, ind, _, _ = plugin
+    ind.variables["Nightime"].value = "true"
+    door = _no_lux_door(ind, "Nightime")
+    _open_it(p, ind, door)
+    assert ("on", 104) in ind.commands
+
+
+def test_without_a_lux_sensor_the_light_stays_off_in_daylight(plugin):
+    p, ind, _, _ = plugin
+    ind.variables["Nightime"].value = "false"
+    door = _no_lux_door(ind, "Nightime")
+    _open_it(p, ind, door)
+    assert ("on", 104) not in ind.commands
+
+
+def test_with_nothing_to_judge_dark_by_the_light_follows_the_door(plugin):
+    p, ind, _, _ = plugin
+    door = _no_lux_door(ind, "")
+    _open_it(p, ind, door)
+    assert ("on", 104) in ind.commands
+
+
+def test_a_missing_dark_variable_is_warned_about_once(plugin):
+    p, ind, _, _ = plugin
+    door = _no_lux_door(ind, "NoSuchVariable")
+    said = []
+    p.logger.warning = lambda m, *a, **k: said.append(str(m))
+    _open_it(p, ind, door)
+    p._evaluate(door.id)
+    assert ("on", 104) in ind.commands
+    assert len([m for m in said if "NoSuchVariable" in m]) == 1, said
+
+
+def test_the_setup_check_covers_the_three_lamps(plugin, monkeypatch):
+    p, ind, _, plugin_mod = plugin
+    monkeypatch.setattr(plugin_mod, "log_startup_banner", None)   # needs a real server
+    ind.devices.add(FakeDevice(301, "Hall Lamp", {"onState": True}))
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    door = _lamp_door(ind, "999999")          # the reference has gone
+    p.startup()
+    p.deviceStartComm(door)
+    info, err = [], []
+    p.logger.info = lambda m, *a, **k: info.append(str(m))
+    p.logger.error = lambda m, *a, **k: err.append(str(m))
+    p.menuTestSetup()
+    assert any("PASS" in m and "signal lamp" in m and "Hall Lamp" in m for m in info), info
+    assert any("PASS" in m and "second lamp" in m and "Conservatory" in m for m in info), info
+    assert any("FAIL" in m and "restore reference" in m and "999999" in m for m in err), err
+
+
+def test_the_setup_check_fails_a_signal_lamp_that_cannot_show_colours(plugin, monkeypatch):
+    p, ind, _, plugin_mod = plugin
+    monkeypatch.setattr(plugin_mod, "log_startup_banner", None)
+    plain = FakeDevice(301, "Plain Lamp", {"onState": True})
+    plain.supportsRGB = False
+    ind.devices.add(plain)
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": True}))
+    ind.devices.add(FakeDevice(303, "Reference Lamp", {"onState": True}))
+    door = _lamp_door(ind, "303")
+    p.startup()
+    p.deviceStartComm(door)
+    info, err = [], []
+    p.logger.info = lambda m, *a, **k: info.append(str(m))
+    p.logger.error = lambda m, *a, **k: err.append(str(m))
+    p.menuTestSetup()
+    assert any("signal lamp" in m and "cannot show colours" in m for m in err), err
+    assert any("PASS" in m and "restore reference" in m for m in info), info

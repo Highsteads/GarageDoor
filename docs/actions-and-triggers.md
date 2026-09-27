@@ -7,15 +7,15 @@ nav_order: 6
 
 ## Working the door
 
-The plugin's actions are listed under **Garage Door** when you add an action to an action group, a schedule, a trigger or a control page button. Each one asks you to pick the door, and has one optional box, a note that shows on the door device as **Last operated by** — such as "Hall button" or "Dashboard", so you can see later what opened it. Click **OK** to save the action, even if you leave the note blank.
+The plugin's actions are listed under **Garage Door** when you add an action to an action group, a schedule, a trigger or a control page button. Each one asks you to pick the door, and has one optional box, a note that shows on the door device as **Last operated by** — such as "Hall button" or "Dashboard", so you can see later what opened it. On **Re-read Door State**, which never presses the relay, the note goes into the Event Log line instead. Click **OK** to save the action, even if you leave the note blank.
 
 | Action | What it does |
 |---|---|
 | **Open Garage Door** | Presses the relay, unless the door is already open, in which case it writes "already open, nothing to do" to the Event Log and does nothing. |
 | **Close Garage Door** | Presses the relay, unless the door is already closed, in which case it does nothing. |
 | **Toggle Garage Door** | Presses the relay, whatever the door is doing. This suits a wall button. |
-| **Pulse Relay (diagnostic)** | Presses the relay, whatever the door is doing, for testing. It ignores the note and always shows **action:pulse**. |
-| **Re-read Door State** | Reads both sensors again and writes where the door is to the Event Log. It does not press the relay, and it ignores the note. |
+| **Pulse Relay (diagnostic)** | Presses the relay, whatever the door is doing, for testing. **Last operated by** shows your note, or **action:pulse** if you left it blank. |
+| **Re-read Door State** | Reads both sensors again and writes where the door is to the Event Log, with your note on the end if you typed one. It does not press the relay. |
 
 The opener decides which way the door goes, so a press while the door is part-way does whatever your opener does with a press at that point.
 

@@ -4,9 +4,15 @@
 # Description: One Indigo device that owns the garage door — its real position,
 #              how long it has been open, the alarm when it is left that way,
 #              and the light that follows whoever walked in.
-# Author:      CliveS & Claude Fable 5.1
-# Date:        11-09-2026
-# Version:     1.7
+# Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
+# Date:        27-09-2026
+# Version:     1.8
+#
+# v1.8 (27-09-2026, Claude Opus 5.5): Pulse length, the repeat-press window and
+# Logging level are now read; a decimal lux threshold is honoured; the Pulse
+# Relay and Re-read notes are used; with no light-level sensor the light is
+# judged by the Dark variable instead of never coming on; and Test Garage Door
+# Setup checks the signal lamp, the second lamp and the restore reference.
 #
 # WHY THIS PLUGIN EXISTS
 # Six separate places used to work out "is the garage open" from the two raw
@@ -88,6 +94,7 @@ class Plugin(indigo.PluginBase):
     # ------------------------------------------------------------------
 
     def startup(self):
+        self._apply_log_level(self.pluginPrefs.get("logLevel"))
         indigo.devices.subscribeToChanges()
         if self._shadow_mode():
             self.logger.info("Started in SHADOW MODE — watching and reporting, "
@@ -102,12 +109,28 @@ class Plugin(indigo.PluginBase):
         """Apply prefs live rather than making the user restart."""
         if userCancelled:
             return
+        self._apply_log_level(valuesDict.get("logLevel"))
         mode = "SHADOW MODE (not operating the door)" if self._shadow_mode() \
             else "door control ENABLED"
         self.logger.info(f"Configuration saved — now in {mode}")
 
     def _shadow_mode(self):
         return G.as_bool(self.pluginPrefs.get("shadowMode"), True)
+
+    def _apply_log_level(self, value):
+        """Apply the Logging level pref to the EVENT LOG handler only.
+
+        Not to self.logger: that gates before both handlers, and would throw
+        Debug lines away before this plugin's own log file ever saw them.
+        Until v1.8 the pref was stored and never read.
+        """
+        handler = getattr(self, "indigo_log_handler", None)
+        if handler is None:
+            return
+        try:
+            handler.setLevel(G.log_level(value))
+        except Exception as e:
+            self.logger.debug(f"Could not set the logging level: {e}")
 
     # ------------------------------------------------------------------
     # Device lifecycle
@@ -228,6 +251,26 @@ class Plugin(indigo.PluginBase):
             return str(indigo.variables[int(name_or_id)].value).strip().lower() == "true"
         except (KeyError, ValueError, TypeError):
             return False
+
+    @staticmethod
+    def _var_reading(name_or_id):
+        """A variable as True, False or None (missing, or not true/false).
+
+        _var_true answers False for a variable it cannot find, which is right
+        for the alarm and wrong for the light: "cannot tell whether it is dark"
+        must not read as "it is light".
+        """
+        if not name_or_id:
+            return None
+        for key in (str(name_or_id), ):
+            try:
+                return G.as_reed(indigo.variables[key].value)
+            except (KeyError, ValueError):
+                pass
+        try:
+            return G.as_reed(indigo.variables[int(name_or_id)].value)
+        except (KeyError, ValueError, TypeError):
+            return None
 
     # ------------------------------------------------------------------
     # ConfigUI list callbacks
@@ -380,8 +423,21 @@ class Plugin(indigo.PluginBase):
         if not light_id:
             return
         present = self._state_of(props.get("presenceSensorId"), "onState", "occupancy", "motion")
-        lux     = self._state_of(props.get("luxSensorId"), "illuminance", "sensorValue")
-        want = G.light_decision(state, present, lux, props)
+        lux_id  = props.get("luxSensorId")
+        lux     = self._state_of(lux_id, "illuminance", "sensorValue") if lux_id else None
+        dark    = None
+        if not lux_id and G.cfg_get(props, "lightOnlyIfDark"):
+            # No light-level sensor: judge "dark" by the Dark variable. Without
+            # this the light was switched off on every close but never on.
+            night_var = props.get("nightVariable")
+            dark = self._var_reading(night_var)
+            if dark is None and night_var:
+                self._warn_once(dev, "dark_var",
+                                f"there is no light-level sensor and the \"Dark\" variable "
+                                f"'{night_var}' cannot be read, so the garage light will come "
+                                f"on whenever the door opens, day or night.")
+        want = G.light_decision(state, present, lux, props,
+                                dark=dark, lux_configured=bool(lux_id))
         if want is None:
             return                                  # no reading: leave it alone
 
@@ -509,8 +565,8 @@ class Plugin(indigo.PluginBase):
         props = st["props"] if st else dict(dev.pluginProps)
         now = time.time()
 
-        debounce = G.cfg_get(props, "operationDebounceSeconds") or 5
-        if st and (now - st["last_pulse_at"]) < debounce:
+        debounce = G.debounce_seconds(props)
+        if st and debounce and (now - st["last_pulse_at"]) < debounce:
             self.logger.warning(f"{dev.name}: ignoring a repeat operation within "
                                 f"{debounce}s of the last one")
             return False
@@ -525,13 +581,10 @@ class Plugin(indigo.PluginBase):
                                 "Turn off Shadow Mode in the plugin config to enable control.")
             return False
 
-        try:
-            pulse_ms = int(G.cfg_get(props, "pulseMilliseconds") or 1000)
-        except (TypeError, ValueError):
-            pulse_ms = 1000
+        pulse_s = G.pulse_seconds(props)
         try:
             indigo.device.turnOn(int(relay_id))
-            self.sleep(pulse_ms / 1000.0)
+            self.sleep(pulse_s)
             indigo.device.turnOff(int(relay_id))
         except Exception as e:
             self.logger.error(f"{dev.name}: relay pulse failed — {e}")
@@ -583,13 +636,15 @@ class Plugin(indigo.PluginBase):
     def actionPulseRelay(self, action):
         dev = self._door_for(action)
         if dev:
-            self._pulse(dev, "action:pulse")
+            self._pulse(dev, action.props.get("source") or "action:pulse")
 
     def actionRefreshState(self, action):
         dev = self._door_for(action)
         if dev:
             self._evaluate(dev.id)
-            self.logger.info(f"{dev.name}: {G.describe(self.doors.get(dev.id, {}).get('state'))}")
+            note = str(action.props.get("source") or "").strip()
+            line = f"{dev.name}: {G.describe(self.doors.get(dev.id, {}).get('state'))}"
+            self.logger.info(f"{line} ({note})" if note else line)
 
     # ------------------------------------------------------------------
     # Menus
@@ -628,7 +683,10 @@ class Plugin(indigo.PluginBase):
                     ("relay",          "relayId",         None),
                     ("presence",       "presenceSensorId", None),
                     ("lux",            "luxSensorId",     None),
-                    ("garage light",   "garageLightId",   None)):
+                    ("garage light",   "garageLightId",   None),
+                    ("signal lamp",    "hallLampId",      None),
+                    ("second lamp",    "conservatoryId",  None),
+                    ("restore reference", "restoreReferenceId", "onState")):
                 dev_ref = p.get(key)
                 if not dev_ref:
                     self.logger.info(f"  ----  {label}: not set")
@@ -639,8 +697,12 @@ class Plugin(indigo.PluginBase):
                     self.logger.error(f"  FAIL  {label}: device {dev_ref} does not exist")
                     continue
                 extra = ""
+                if key == "hallLampId" and getattr(d, "supportsRGB", True) is False:
+                    self.logger.error(f"  FAIL  {label}: {d.name} cannot show colours")
+                    continue
                 if state_key:
-                    v = d.states.get(state_key)
+                    v = getattr(d, "onState", None) if state_key == "onState" \
+                        else d.states.get(state_key)
                     extra = f" ({state_key}={v!r})"
                     if v is None:
                         self.logger.error(f"  FAIL  {label}: {d.name} has no "
