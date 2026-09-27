@@ -1,99 +1,60 @@
-# Garage Door
+# Garage Door for Indigo
 
-**Version:** 1.7 | **Author:** CliveS & Claude | **Platform:** Indigo 2025.2 or later
+**One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-One Indigo device that owns your garage door — where it actually is, how long it has been open,
-the alarm when it has been left that way, and the light that follows whoever walked in.
+**Version:** 1.7 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
-## Why
+**[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
-A garage door with two contact sensors is deceptively awkward. Neither sensor answers "is it
-open" on its own — each only reports whether the door has reached *that* end of its travel — so
-every script, page and notification that wants to know ends up carrying its own copy of the
-truth table. In this house six of them did, and they did not agree on how: some read the sensor's
-`contact` state, one read `onState`, and those two are exact opposites. Both were correct, which
-is worse than one being wrong, because a single well-meant tidy-up would have broken half of them
-without a sound.
+---
 
-There is a second problem that scripts cannot solve at all. A script runs when something fires
-it, so nothing is watching the clock, and a timer expiring needs a listener. An open alarm built
-that way sat dead here for three months without anyone noticing. A plugin has a thread that keeps
-running, which is the whole difference.
+## What it does
 
-## What it gives you
+This plugin gives [Indigo](https://www.indigodomo.com) one device for your garage door. It uses the contact sensors and relay you already have in Indigo, so there is no account, no internet service and nothing else to install.
 
-**One device**, with a proper state — closed, open, moving, stuck or unknown. Mid-travel is
-directly observable, because both reeds are apart, so "moving" is measured rather than assumed.
-Everything else in your system can ask this one device instead of doing the sums again.
+- **Knows where the door is** — closed, open, moving, stuck part-way or unknown — from a contact sensor at each end of its travel. Anything else in Indigo that wants to know can ask this one device.
+- **Raises the alarm when the door is left open,** after 15 minutes to start with, and marks it urgent when nobody is home, when it is dark, when the door is stuck or when it has been open for 45 minutes. It repeats until the door is shut.
+- **Runs your triggers** when the door opens, closes, starts moving, is left open, is still open, is stuck, or its sensors disagree, so you choose what happens — a notification, a light, anything else.
+- **Opens, closes and toggles the door** from actions, control pages, schedules and triggers, by pressing the opener's relay for one second. A second press within five seconds is ignored.
+- **Switches the garage light** on when the door opens and it is dark, and off when it closes.
+- **Colours a lamp in the house** blue while the door moves and red while it is open, and puts it back as the house had it when the door closes.
+- **Keeps a variable up to date for HomeKit,** with on meaning closed to start with, as the HomeKitLink-Siri plugin expects.
+- **Starts in Shadow Mode,** watching and reporting but never pressing the relay or switching a light, until you are ready to hand it the controls.
 
-**An alarm that knows the difference between situations.** A door open in daylight with somebody
-home is an oversight and can wait fifteen minutes. The same door with the house empty is a
-different event and goes out at once. So does one stuck part-way, or open after dark, or open for
-the best part of an hour. All four thresholds are yours to set.
+I wrote it because six different scripts and pages in my Indigo system each worked out for themselves whether the garage was open, and they did not all agree on how.
 
-**Events rather than opinions.** The plugin tells you the door opened, closed, started moving,
-has been left open, is still open, is stuck, or that its sensors are contradicting each other.
-What happens next is up to you — point your own action groups at those triggers and keep whatever
-notification and lighting behaviour you already have.
+## What it works with
 
-**The garage light, if you want it.** On when the door opens and it is dark enough to want it, off the moment the door closes. There is an option to require presence as well, off by default.
+| You need | For |
+|---|---|
+| **Two contact sensors** on the door, one at the bottom of its travel and one at the top, each with a **contact** state in Indigo | Knowing where the door is |
+| **The relay that works your opener,** as an Indigo device | Opening and closing the door |
+| A presence sensor, the garage light and a light-level sensor (optional) | The garage light |
+| A colour lamp, a second lamp and a reference lamp (optional) | Showing the door in the house |
+| Indigo variables that are true when nobody is home and when it is dark (optional) | Making the alarm urgent |
 
-**A HomeKit mirror variable**, with an invert option, because HomeKitLink-Siri maps ON to Closed
-and that catches everybody once.
+## Installing
 
-## Shadow Mode — read this before anything else
-
-**The plugin ships read-only.** It watches the door, reports its state, fires events and runs the
-alarm, but it will not touch the relay or the light. Your existing setup keeps operating the
-door.
-
-That is deliberate. A garage door is load-bearing — you want the car out in the morning — and a
-new state machine deserves a few days of being watched before it is handed the controls. Leave
-Shadow Mode on, watch the log follow the real door, check that `travelSeconds` looks sensible and
-that nothing reports "stuck" when it is not, and then turn it off in the plugin's configuration.
-
-One ordering note. While Shadow Mode is on, whatever you have now is still driving your lights,
-so do not point your action groups at the new events until you switch over, or you will get both.
+1. Go to the [Releases page](https://github.com/Highsteads/GarageDoor/releases/latest) and download `GarageDoor.indigoPlugin.zip`
+2. Unzip the downloaded file — you will get `GarageDoor.indigoPlugin`
+3. Double-click `GarageDoor.indigoPlugin` — Indigo will install it automatically
 
 ## Setting it up
 
-1. Create a **Garage Door** device.
-2. Pick the **bottom** and **top** contact sensors. Bottom made means closed, top made means
-   open. If yours are the other way round, swap them here rather than anywhere else.
-3. Pick the **relay** that operates the door, and set the pulse length. Direction is decided by
-   the opener itself — the plugin only ever sends a pulse.
-4. Set the alarm thresholds, and name your "away" and "dark" variables if you have them. Both are
-   looked up by name, so recreating a variable will not break anything.
-5. Optionally add the presence sensor, garage light and light-level sensor.
-6. Run **Plugins → Garage Door → Test Garage Door Setup**. It checks every device and variable you
-   have named and prints a PASS or FAIL for each, along with the current door state.
+1. Leave **Shadow Mode** ticked in **Plugins → Garage Door → Configure** for the first few days, so your present set-up keeps working the door while you watch the plugin follow it.
+2. Create a **New Device**, choose **Garage Door**, and pick the bottom and top contact sensors and the door relay. Add the alarm variables, light, lamps and HomeKit variable if you want them.
+3. Choose **Plugins → Garage Door → Test Garage Door Setup**, and check nothing in the Event Log says **FAIL**.
+4. Open and close the door, and check the device follows it. When you are happy, point your buttons and notifications at the plugin and untick **Shadow Mode**.
 
-## Requirements
+The [full guide](https://highsteads.github.io/GarageDoor/) goes through each step, explains every setting, and covers what to do if something does not work.
 
-Indigo 2025.2 or later. No external services, no credentials, nothing to install — every input is
-a device or variable you already have.
+## What's new
 
-## Version history
+**v1.7** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
 
-**1.7** (11-Sep-2026) — **The bundle now carries the standard GitHub record.** Indigo plugins can carry a small note inside the bundle saying where their source lives on GitHub, spelt the way the Indigo Domotics and community plugins spell it. This one now has it, pointing at this repository. Nothing else changed.
+**v1.6** — Closing the door no longer switches the house lamps off when the reference lamp cannot be read. The lamps are left as they are, and the Event Log says which device is missing.
 
-**1.6** (31-Aug-2026) — **Closing the door was switching the hall and conservatory lamps off when it had no business deciding.** The lamps are meant to go back to how the house had them, judged by a reference lamp you nominate. That reference was pointing at a lamp taken out of the room in August, so it could not be read — and an unreadable reference was being treated as "the reference says off". Every close turned both lamps out, and the restore it was supposed to do had never once run. Nothing was logged either, because a lamp that is switched off and a lamp that no longer exists looked the same to the code.
-
-There are three answers now, not two. No reference set at all still means a shut door leaves the lamps off, which is what you would want. A reference that reads is obeyed. A reference that is set and cannot be read is neither — the lamps are left exactly as they are, and the log says once per start which device it cannot find, so the setting can be corrected or cleared.
-
-**1.5** (02-Aug-2026) — Fixes "Action has not been completely configured" on the door actions. Indigo marks an action step as configured when its dialog is completed, and 1.2 had removed the dialog altogether — so the step could never become configured and failed every time it ran. The dialog is back. It asks for nothing you need to fill in.
-
-**1.4** (02-Aug-2026) — The garage light follows the door and the light level by default. Presence-gating is still there as an option but it is now off: a light that waits until it is certain somebody is in the garage leaves you standing in the dark, which is not what a garage light is for.
-
-**1.3** (02-Aug-2026) — The garage light now follows presence properly. It was only being considered when the door itself changed, so walking into the garage a minute after opening it never turned anything on. It is now checked continuously, and only actually switched when the answer changes.
-
-**1.2** (02-Aug-2026) — The door actions now appear under the plugin's own name in the action picker rather than inside Indigo's built-in **Device Actions** submenu, where they sat next to Turn On, Turn Off and Toggle and were easy to confuse with the relay's own. They also no longer ask for anything, so there is no dialog to leave half-finished.
-
-**1.1** (02-Aug-2026) — Takes over the house lamps that announce the door, so the scripts that used to do it can retire. Blue while it moves, red while it is open, and on closing they go back to matching a reference lamp elsewhere in the house. Every part is optional and every colour is a setting — leave the devices blank and none of it happens.
-
-**1.0** (02-Aug-2026) — First release. Door state from two position sensors, escalating
-presence-aware open alarm, seven events, open/close/toggle actions, optional garage light and
-HomeKit mirror. Ships in Shadow Mode.
+Every version is listed in the [version history](https://highsteads.github.io/GarageDoor/changelog.html).
 
 ## Authors & licence
 
