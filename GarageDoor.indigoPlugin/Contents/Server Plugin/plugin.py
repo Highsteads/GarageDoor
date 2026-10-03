@@ -6,7 +6,11 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
 # Date:        27-09-2026
-# Version:     1.8
+# Version:     1.9
+#
+# v1.9 (03-10-2026, Claude Sonnet 5.5): a Direction of travel state (opening,
+# closing or none), worked out from the end the door was last seen at, so a
+# page opened while the door is moving can say which way instead of guessing.
 #
 # v1.8 (27-09-2026, Claude Opus 5.5): Pulse length, the repeat-press window and
 # Logging level are now read; a decimal lux threshold is honoured; the Pulse
@@ -143,6 +147,7 @@ class Plugin(indigo.PluginBase):
             "state": None,
             "left_closed_at": None,     # when it stopped being shut
             "moving_since": None,       # when it left a known position
+            "last_settled": None,       # the end it was last seen at, closed or open
             "last_level": G.ALERT_NONE,
             "last_notified_min": None,
             "last_pulse_at": 0.0,
@@ -321,6 +326,11 @@ class Plugin(indigo.PluginBase):
         previous = st["state"]
         st["state"] = state
 
+        # Which way it is travelling, from the end it was last seen at.
+        direction = G.door_direction(state, st.get("last_settled"))
+        if state in (G.CLOSED, G.OPEN):
+            st["last_settled"] = state
+
         # --- transitions -------------------------------------------------
         if state != previous:
             if state in (G.MOVING, G.UNKNOWN) and st["moving_since"] is None:
@@ -349,7 +359,7 @@ class Plugin(indigo.PluginBase):
                 elif state == G.STUCK:
                     self.logger.warning(f"{dev.name}: stuck part-way")
                     self._fire(EV_STUCK, dev)
-                self.logger.info(f"{dev.name}: {G.describe(state)}")
+                self.logger.info(f"{dev.name}: {G.describe(state, direction=direction)}")
 
             self._apply_lamps(dev, state, props)
             self._mirror_homekit(dev, state, props)
@@ -362,6 +372,7 @@ class Plugin(indigo.PluginBase):
         # --- states ------------------------------------------------------
         open_min = ((now - st["left_closed_at"]) / 60.0) if st["left_closed_at"] else 0.0
         self._set(dev, "doorState", state)
+        self._set(dev, "direction", direction)
         self._set(dev, "isOpen", state == G.OPEN)
         self._set(dev, "openDurationMinutes", int(open_min))
         self._set(dev, "sensorsHealthy", healthy)

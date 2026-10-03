@@ -30,6 +30,7 @@ These are the names you see when you build a trigger or a control page.
 | Shown as | What it means |
 |---|---|
 | **Door state** | Closed, Open, Moving, Stuck or Unknown, as above. |
+| **Direction of travel** | **opening** or **closing** while the door is between its two ends, worked out from the end it was last seen at, and **none** otherwise. A page or trigger that opens mid-trip can use it to say which way the door is going. |
 | **Is open** | True only when the door is fully open, not while it is moving or stuck. |
 | **Minutes open** | How many whole minutes since the door last left the closed position, and 0 when it is closed. If the plugin restarts while the door is open, the count starts again from the restart. |
 | **Alert level** | 0 when all is well, 1 when the door has been left open, and 2 when that has become urgent. The [How it works](how-it-works.md) page explains when each one applies. |

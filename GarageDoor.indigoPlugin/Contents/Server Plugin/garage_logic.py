@@ -199,6 +199,29 @@ def derive_state(bottom_contact, top_contact, moving_seconds=0.0, cfg=None):
     return MOVING, True
 
 
+OPENING = "opening"
+CLOSING = "closing"
+NO_DIRECTION = "none"
+
+
+def door_direction(state, last_settled):
+    """Which way a door that is between its two ends is travelling.
+
+    The door was last SEEN at one end, so it is heading for the other: seen
+    closed means it is opening, seen open means it is closing. Only a door that
+    is moving (or stuck part-way, still pointing the way it went) has a
+    direction, and a plugin that starts while the door is already between the
+    ends has not seen it settle, so it says "none" rather than guess.
+    """
+    if state not in (MOVING, STUCK):
+        return NO_DIRECTION
+    if last_settled == CLOSED:
+        return OPENING
+    if last_settled == OPEN:
+        return CLOSING
+    return NO_DIRECTION
+
+
 def is_shut(state):
     """Only CLOSED counts as shut. Unknown is not reassurance."""
     return state == CLOSED
@@ -402,7 +425,7 @@ def homekit_value(state, invert=True):
     return None
 
 
-def describe(state, open_minutes=None, away=False, night=False):
+def describe(state, open_minutes=None, away=False, night=False, direction=NO_DIRECTION):
     """One line of plain English for a log or a notification."""
     if state == CLOSED:
         return "Garage door is closed"
@@ -410,7 +433,9 @@ def describe(state, open_minutes=None, away=False, night=False):
     if state == STUCK:
         head = "Garage door is stuck part-way"
     elif state == MOVING:
-        head = "Garage door is moving"
+        head = ("Garage door is opening" if direction == OPENING
+                else "Garage door is closing" if direction == CLOSING
+                else "Garage door is moving")
     elif state == UNKNOWN:
         head = "Garage door position is unknown"
     else:

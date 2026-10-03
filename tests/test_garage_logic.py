@@ -432,3 +432,28 @@ def test_a_configured_but_silent_lux_sensor_still_leaves_the_light_alone():
 def test_presence_gating_still_applies_without_a_lux_sensor():
     cfg = {"lightOnlyIfPresent": True}
     assert g.light_decision(g.OPEN, False, None, cfg, dark=True, lux_configured=False) is False
+
+
+# ── direction of travel ─────────────────────────────────────────
+
+def test_a_door_last_seen_closed_is_opening_and_one_last_seen_open_is_closing():
+    assert g.door_direction(g.MOVING, g.CLOSED) == "opening"
+    assert g.door_direction(g.MOVING, g.OPEN) == "closing"
+    assert g.door_direction(g.STUCK, g.OPEN) == "closing"
+
+
+def test_a_door_that_is_not_between_the_ends_has_no_direction():
+    for state in (g.CLOSED, g.OPEN, g.UNKNOWN):
+        assert g.door_direction(state, g.CLOSED) == "none"
+        assert g.door_direction(state, g.OPEN) == "none"
+
+
+def test_a_door_never_seen_settle_is_not_guessed_at():
+    assert g.door_direction(g.MOVING, None) == "none"
+    assert g.door_direction(g.MOVING, g.MOVING) == "none"
+
+
+def test_the_log_line_says_which_way_when_it_knows():
+    assert g.describe(g.MOVING, direction="opening") == "Garage door is opening"
+    assert g.describe(g.MOVING, direction="closing") == "Garage door is closing"
+    assert g.describe(g.MOVING) == "Garage door is moving"

@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.8 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.9 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -49,6 +49,8 @@ I wrote it because six different scripts and pages in my Indigo system each work
 The [full guide](https://highsteads.github.io/GarageDoor/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v1.9** — The door now says which way it is travelling. A new Direction of travel state reads opening or closing while the door is between its two ends, worked out from the end it was last seen at, and the Event Log says "opening" or "closing" instead of "moving". A page opened part-way through a trip can show the right word at once.
 
 **v1.8** — Pulse length, the repeat-press window and the logging level now do what they say, and the garage light comes on without a light-level sensor, going by your "Dark" variable instead. Test Garage Door Setup now checks the lamps too.
 

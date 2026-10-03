@@ -7,6 +7,14 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.9 — 3 October 2026
+
+The door now says which way it is travelling.
+
+- **Direction of travel** is a new state on the device. It reads **opening** or **closing** while the door is between its two ends, and **none** the rest of the time. The plugin works it out from the end the door was last seen at: a door last seen closed is opening, and one last seen open is closing.
+- The Event Log now says "Garage door is opening" or "Garage door is closing" instead of "moving".
+- If the plugin starts while the door is already part-way along, it has not seen the door settle, so it says **none** until the door reaches an end.
+
 ## 1.8 — 27 September 2026
 
 Several settings did nothing, and now they do what they say.

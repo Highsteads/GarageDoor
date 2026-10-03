@@ -139,6 +139,11 @@
                 <TriggerLabel>Door state</TriggerLabel>
                 <ControlPageLabel>Door state</ControlPageLabel>
             </State>
+            <State id="direction">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Direction of travel</TriggerLabel>
+                <ControlPageLabel>Direction of travel</ControlPageLabel>
+            </State>
             <State id="isOpen">
                 <ValueType boolType="TrueFalse">Boolean</ValueType>
                 <TriggerLabel>Is open</TriggerLabel>

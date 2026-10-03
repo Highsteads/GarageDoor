@@ -624,3 +624,35 @@ def test_the_setup_check_fails_a_signal_lamp_that_cannot_show_colours(plugin, mo
     p.menuTestSetup()
     assert any("signal lamp" in m and "cannot show colours" in m for m in err), err
     assert any("PASS" in m and "restore reference" in m for m in info), info
+
+
+def test_the_direction_state_follows_the_end_the_door_was_last_seen_at(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "closed"         # the fixture starts shut
+
+    ind.devices[101].states["contact"] = False          # leaves the bottom
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "moving" and door.states["direction"] == "opening"
+
+    ind.devices[102].states["contact"] = True           # reaches the top
+    p._evaluate(door.id)
+    assert door.states["direction"] == "none"
+
+    ind.devices[102].states["contact"] = False          # leaves the top
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "moving" and door.states["direction"] == "closing"
+
+    ind.devices[101].states["contact"] = True           # back at the bottom
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "closed" and door.states["direction"] == "none"
+
+
+def test_a_plugin_started_mid_travel_says_none_until_the_door_settles(plugin):
+    p, ind, door, _ = plugin
+    ind.devices[101].states["contact"] = False
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "moving"
+    assert door.states["direction"] == "none"
