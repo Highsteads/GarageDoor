@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.9 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.10 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -12,9 +12,9 @@
 
 This plugin gives [Indigo](https://www.indigodomo.com) one device for your garage door. It uses the contact sensors and relay you already have in Indigo, so there is no account, no internet service and nothing else to install.
 
-- **Knows where the door is** — closed, open, moving, stuck part-way or unknown — from a contact sensor at each end of its travel. Anything else in Indigo that wants to know can ask this one device.
+- **Knows where the door is** — closed, opening, open, closing, stuck part-way or unknown — from a contact sensor at each end of its travel. Anything else in Indigo that wants to know can ask this one device.
 - **Raises the alarm when the door is left open,** after 15 minutes to start with, and marks it urgent when nobody is home, when it is dark, when the door is stuck or when it has been open for 45 minutes. It repeats until the door is shut.
-- **Runs your triggers** when the door opens, closes, starts moving, is left open, is still open, is stuck, or its sensors disagree, so you choose what happens — a notification, a light, anything else.
+- **Runs your triggers** when the door opens, closes, starts opening or closing, is left open, is still open, is stuck, or its sensors disagree, so you choose what happens — a notification, a light, anything else.
 - **Opens, closes and toggles the door** from actions, control pages, schedules and triggers, by pressing the opener's relay for one second. A second press within five seconds is ignored.
 - **Switches the garage light** on when the door opens and it is dark, and off when it closes.
 - **Colours a lamp in the house** blue while the door moves and red while it is open, and puts it back as the house had it when the door closes.
@@ -49,6 +49,8 @@ I wrote it because six different scripts and pages in my Indigo system each work
 The [full guide](https://highsteads.github.io/GarageDoor/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v1.10** — The Door state now reads opening or closing while the door travels, so every trigger, script and dashboard knows which way it is going. Two new events fire when it starts opening and when it starts closing.
 
 **v1.9** — The door now says which way it is travelling. A new Direction of travel state reads opening or closing while the door is between its two ends, worked out from the end it was last seen at, and the Event Log says "opening" or "closing" instead of "moving". A page opened part-way through a trip can show the right word at once.
 

@@ -13,7 +13,7 @@ I wrote it because six different scripts and pages in my Indigo system each work
 
 - **Knows where the door is,** from a contact sensor at each end of its travel. When neither sensor sees the door, it is moving, and if that goes on longer than it should, the door is stuck.
 - **Raises the alarm when the door is left open,** marks it urgent when nobody is home, when it is dark or when the door is stuck, and repeats it until the door is shut.
-- **Runs your triggers** when the door opens, closes, starts moving, is left open, is still open, is stuck, or its sensors disagree with each other. What happens then is up to you.
+- **Runs your triggers** when the door opens, closes, starts opening or closing, is left open, is still open, is stuck, or its sensors disagree with each other. What happens then is up to you.
 - **Opens, closes and toggles the door** from actions, control pages, schedules and triggers, by pressing the opener's relay for you.
 - **Switches the garage light** on when the door opens and it is dark, and off when it closes, if you give it a light.
 - **Colours a lamp in the house** blue while the door moves and red while it is open, if you give it a colour lamp.

@@ -7,6 +7,15 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.10 — 3 October 2026
+
+The door's own state now says which way it is travelling.
+
+- **Door state** reads **Closed, Opening, Open, Closing, Stuck or Unknown**. It reads **Moving** only when the plugin started while the door was already part-way and has not yet seen which end it left.
+- Two new events, **Garage Door Started Opening** and **Garage Door Started Closing**, fire as the door leaves an end. **Garage Door Started Moving** still fires on every departure.
+- The **Direction of travel** state stays as it was.
+- A trigger or script that tested Door state for "moving" should now test for opening or closing as well.
+
 ## 1.9 — 3 October 2026
 
 The door now says which way it is travelling.

@@ -131,6 +131,8 @@
                     <List>
                         <Option value="closed">Closed</Option>
                         <Option value="open">Open</Option>
+                        <Option value="opening">Opening</Option>
+                        <Option value="closing">Closing</Option>
                         <Option value="moving">Moving</Option>
                         <Option value="stuck">Stuck</Option>
                         <Option value="unknown">Unknown</Option>

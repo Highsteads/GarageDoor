@@ -6,7 +6,12 @@
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
 # Date:        27-09-2026
-# Version:     1.9
+# Version:     1.10
+#
+# v1.10 (03-10-2026, Claude Sonnet 5.5): the Door state itself now reads
+# opening or closing while the door travels (moving only when the direction is
+# unknown), and two new events fire, so every trigger, script and page learns
+# the direction from the one state. The Direction of travel state stays.
 #
 # v1.9 (03-10-2026, Claude Sonnet 5.5): a Direction of travel state (opening,
 # closing or none), worked out from the end the door was last seen at, so a
@@ -63,6 +68,8 @@ TICK_SECONDS = 1.0          # fine enough to time travel, cheap enough to ignore
 EV_OPENED       = "doorOpened"
 EV_CLOSED       = "doorClosed"
 EV_MOVING       = "doorStartedMoving"
+EV_OPENING      = "doorStartedOpening"
+EV_CLOSING      = "doorStartedClosing"
 EV_LEFT_OPEN    = "doorLeftOpen"
 EV_STILL_OPEN   = "doorStillOpen"
 EV_STUCK        = "doorStuck"
@@ -363,6 +370,10 @@ class Plugin(indigo.PluginBase):
                     self._fire(EV_CLOSED, dev)
                 elif state == G.MOVING:
                     self._fire(EV_MOVING, dev)
+                    if direction == G.OPENING:
+                        self._fire(EV_OPENING, dev)
+                    elif direction == G.CLOSING:
+                        self._fire(EV_CLOSING, dev)
                 elif state == G.STUCK:
                     self.logger.warning(f"{dev.name}: stuck part-way")
                     self._fire(EV_STUCK, dev)
@@ -378,7 +389,7 @@ class Plugin(indigo.PluginBase):
 
         # --- states ------------------------------------------------------
         open_min = ((now - st["left_closed_at"]) / 60.0) if st["left_closed_at"] else 0.0
-        self._set(dev, "doorState", state)
+        self._set(dev, "doorState", G.published_state(state, direction))
         self._set(dev, "direction", direction)
         self._set(dev, "isOpen", state == G.OPEN)
         self._set(dev, "openDurationMinutes", int(open_min))

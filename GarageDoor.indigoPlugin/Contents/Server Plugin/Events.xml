@@ -29,6 +29,24 @@
             </Field>
         </ConfigUI>
     </Event>
+    <Event id="doorStartedOpening">
+        <Name>Garage Door Started Opening</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
+    <Event id="doorStartedClosing">
+        <Name>Garage Door Started Closing</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
     <Event id="doorLeftOpen">
         <Name>Garage Door Left Open</Name>
         <ConfigUI>

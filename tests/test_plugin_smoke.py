@@ -197,7 +197,7 @@ def test_a_full_open_cycle_writes_states_and_fires_events(plugin):
 
     ind.devices[101].states["contact"] = False        # leaves the bottom
     p._evaluate(door.id)
-    assert door.states["doorState"] == "moving"
+    assert door.states["doorState"] == "opening"
 
     ind.devices[102].states["contact"] = True         # reaches the top
     p._evaluate(door.id)
@@ -634,7 +634,7 @@ def test_the_direction_state_follows_the_end_the_door_was_last_seen_at(plugin):
 
     ind.devices[101].states["contact"] = False          # leaves the bottom
     p._evaluate(door.id)
-    assert door.states["doorState"] == "moving" and door.states["direction"] == "opening"
+    assert door.states["doorState"] == "opening" and door.states["direction"] == "opening"
 
     ind.devices[102].states["contact"] = True           # reaches the top
     p._evaluate(door.id)
@@ -642,7 +642,7 @@ def test_the_direction_state_follows_the_end_the_door_was_last_seen_at(plugin):
 
     ind.devices[102].states["contact"] = False          # leaves the top
     p._evaluate(door.id)
-    assert door.states["doorState"] == "moving" and door.states["direction"] == "closing"
+    assert door.states["doorState"] == "closing" and door.states["direction"] == "closing"
 
     ind.devices[101].states["contact"] = True           # back at the bottom
     p._evaluate(door.id)

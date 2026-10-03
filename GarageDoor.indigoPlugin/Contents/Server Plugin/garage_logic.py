@@ -222,6 +222,22 @@ def door_direction(state, last_settled):
     return NO_DIRECTION
 
 
+def published_state(state, direction):
+    """The door's state as everything outside the plugin sees it.
+
+    Inside, the door is simply "moving"; outside it is opening or closing
+    whenever the direction is known, so a trigger, a dashboard or a script
+    never has to work the direction out for itself. Only a door whose
+    direction is unknown (the plugin started mid-travel) stays "moving".
+    """
+    if state == MOVING:
+        if direction == OPENING:
+            return OPENING
+        if direction == CLOSING:
+            return CLOSING
+    return state
+
+
 def is_shut(state):
     """Only CLOSED counts as shut. Unknown is not reassurance."""
     return state == CLOSED

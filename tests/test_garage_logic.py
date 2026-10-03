@@ -457,3 +457,28 @@ def test_the_log_line_says_which_way_when_it_knows():
     assert g.describe(g.MOVING, direction="opening") == "Garage door is opening"
     assert g.describe(g.MOVING, direction="closing") == "Garage door is closing"
     assert g.describe(g.MOVING) == "Garage door is moving"
+
+
+def test_published_state_names_the_direction():
+    assert g.published_state(g.MOVING, g.OPENING) == "opening"
+    assert g.published_state(g.MOVING, g.CLOSING) == "closing"
+    # Direction unknown (plugin started mid-travel): honestly "moving".
+    assert g.published_state(g.MOVING, g.NO_DIRECTION) == "moving"
+    # Settled and stuck states pass through untouched.
+    for state in (g.CLOSED, g.OPEN, g.STUCK, g.UNKNOWN):
+        assert g.published_state(state, g.OPENING) == state
+
+
+def test_devices_xml_offers_opening_and_closing():
+    import pathlib
+    xml = next(pathlib.Path(__file__).resolve().parents[1].glob(
+        "*.indigoPlugin/Contents/Server Plugin/Devices.xml")).read_text()
+    for opt in ("closed", "opening", "open", "closing", "moving", "stuck", "unknown"):
+        assert f'<Option value="{opt}">' in xml
+
+
+def test_events_xml_has_opening_and_closing_events():
+    import pathlib
+    xml = next(pathlib.Path(__file__).resolve().parents[1].glob(
+        "*.indigoPlugin/Contents/Server Plugin/Events.xml")).read_text()
+    assert 'id="doorStartedOpening"' in xml and 'id="doorStartedClosing"' in xml

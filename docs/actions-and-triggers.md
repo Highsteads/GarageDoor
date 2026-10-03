@@ -36,6 +36,8 @@ To use one, create a new trigger, set its type to **Garage Door**, choose the ev
 | **Garage Door Opened** | The door reaches the fully open position. |
 | **Garage Door Closed** | The door reaches the fully closed position. |
 | **Garage Door Started Moving** | The door leaves either end and neither sensor sees it. |
+| **Garage Door Started Opening** | The door leaves the closed end. |
+| **Garage Door Started Closing** | The door leaves the open end. |
 | **Garage Door Left Open** | The plugin raises a level 1 alert — the door has been open for the first alert time — and again at each repeat. |
 | **Garage Door Still Open (urgent)** | The plugin raises a level 2, urgent, alert, and again at each repeat. |
 | **Garage Door Stuck Part-Way** | The door has been between the two ends for longer than the travel timeout. The alarm goes urgent at the same moment, so **Garage Door Still Open (urgent)** runs too, unless the alarm was urgent already. |
