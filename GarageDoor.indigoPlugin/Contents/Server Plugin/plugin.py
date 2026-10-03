@@ -141,6 +141,13 @@ class Plugin(indigo.PluginBase):
     # ------------------------------------------------------------------
 
     def deviceStartComm(self, dev):
+        # A state added in a later version is hidden from a device made before
+        # it until Indigo is told the state list changed (Direction of travel,
+        # 1.9). Without this the first writes to it are dropped.
+        try:
+            dev.stateListOrDisplayStateIdChanged()
+        except Exception as e:
+            self.logger.debug(f"Could not refresh the state list: {e}")
         props = dict(dev.pluginProps)
         self.doors[dev.id] = {
             "props": props,
