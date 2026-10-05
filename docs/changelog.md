@@ -7,6 +7,13 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.11.1 — 5 October 2026
+
+Two small fixes to what happens when you change Shadow Mode.
+
+- **The Event Log names the mode you just chose.** When you saved the settings, the line "now in ..." could name the mode you had just left. It now reads your new choice.
+- **Turning Shadow Mode off sets the lamps straight away.** The hall and conservatory lamps used to wait until the door next moved. They are now set to suit the door as it is, the same way the garage light is. A lamp that is already showing the right thing is left alone, and nothing is sent while Shadow Mode is on.
+
 ## 1.11 — 5 October 2026
 
 The door no longer says closed on the word of a sensor that has stopped working.

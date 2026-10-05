@@ -4,9 +4,14 @@
 # Description: One Indigo device that owns the garage door — its real position,
 #              how long it has been open, the alarm when it is left that way,
 #              and the light that follows whoever walked in.
-# Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
+# Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5
 # Date:        05-10-2026
-# Version:     1.11
+# Version:     1.11.1
+#
+# v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
+# you just chose, not the one you left, and turning Shadow Mode off sets the
+# hall and conservatory lamps for the door's present state straight away,
+# leaving any lamp that is already right alone.
 #
 # v1.11 (05-10-2026, Claude Opus 5.5): a contact sensor that is disabled, in
 # error or reported offline is no reading, so the door reads Unknown with
@@ -131,7 +136,12 @@ class Plugin(indigo.PluginBase):
         if userCancelled:
             return
         self._apply_log_level(valuesDict.get("logLevel"))
-        mode = "SHADOW MODE (not operating the door)" if self._shadow_mode() \
+        # Indigo may not have copied the saved values into pluginPrefs yet, so
+        # the new mode comes from the dialog's own values. Until 1.11.1 this
+        # read pluginPrefs and could name the mode that had just been left. A
+        # blank or missing field keeps the current mode.
+        shadow = G.as_bool(valuesDict.get("shadowMode"), self._shadow_mode())
+        mode = "SHADOW MODE (not operating the door)" if shadow \
             else "door control ENABLED"
         self.logger.info(f"Configuration saved — now in {mode}")
 
@@ -397,6 +407,12 @@ class Plugin(indigo.PluginBase):
         previous = st["state"]
         st["state"] = state
 
+        # Did Shadow Mode change since the lamps were last looked at? The lamps
+        # are otherwise only set when the door changes state.
+        shadow_now = self._shadow_mode()
+        lamps_mode_changed = st.get("lamps_mode") is not None and st["lamps_mode"] != shadow_now
+        st["lamps_mode"] = shadow_now
+
         # Which way it is travelling, from the end it was last seen at.
         direction = G.door_direction(state, st.get("last_settled"))
         if state in (G.CLOSED, G.OPEN):
@@ -441,6 +457,10 @@ class Plugin(indigo.PluginBase):
 
             self._apply_lamps(dev, state, props)
             self._mirror_homekit(dev, state, props)
+        elif lamps_mode_changed:
+            # No door change to ride on, so a change of Shadow Mode would leave
+            # the lamps as they were until the door next moved.
+            self._apply_lamps(dev, state, props, only_if_different=True)
 
         # --- sensor problems ---------------------------------------------
         # Said once when it starts or changes, not on every tick.
@@ -616,12 +636,15 @@ class Plugin(indigo.PluginBase):
         st["light_fail_at"] = None
         st["light_want"] = want
 
-    def _apply_lamps(self, dev, state, props):
+    def _apply_lamps(self, dev, state, props, only_if_different=False):
         """Drive the house lamps that announce the door.
 
         Ported from Garage_Door_Controller.py so the scripts can retire. Every
         device here is optional — a plugin carrying one house's decoration is no
         use to anyone else, so nothing fires unless it has been configured.
+
+        only_if_different is the reconcile after Shadow Mode changes: a lamp
+        already showing what it should is left alone, so nothing flashes.
         """
         hall_id = props.get("hallLampId")
         cons_id = props.get("conservatoryId")
@@ -660,30 +683,55 @@ class Plugin(indigo.PluginBase):
             try:
                 lamp = indigo.devices[int(hall_id)]
                 if want == G.HALL_OFF:
-                    indigo.device.turnOff(lamp)
+                    if not (only_if_different and self._lamp_is_off(lamp)):
+                        indigo.device.turnOff(lamp)
                 else:
                     key = {G.HALL_MOVING: "hallColourMoving",
                            G.HALL_OPEN:   "hallColourOpen",
                            G.HALL_RESTORE: "hallColourRestore"}[want]
                     r, g, b = G.parse_rgb(props.get(key), _LAMP_FALLBACK[want])
-                    kw = {"redLevel": r, "greenLevel": g, "blueLevel": b}
-                    if want == G.HALL_RESTORE:
-                        try:
-                            wt = int(props.get("hallRestoreWhiteTemp") or 3000)
-                            kw["whiteTemperature"] = wt
-                        except (TypeError, ValueError):
-                            pass
-                    indigo.dimmer.setColorLevels(lamp, **kw)
-                    indigo.dimmer.setBrightness(lamp, 100)
+                    if not (only_if_different and self._lamp_shows(lamp, (r, g, b))):
+                        kw = {"redLevel": r, "greenLevel": g, "blueLevel": b}
+                        if want == G.HALL_RESTORE:
+                            try:
+                                wt = int(props.get("hallRestoreWhiteTemp") or 3000)
+                                kw["whiteTemperature"] = wt
+                            except (TypeError, ValueError):
+                                pass
+                        indigo.dimmer.setColorLevels(lamp, **kw)
+                        indigo.dimmer.setBrightness(lamp, 100)
             except Exception as e:
                 self.logger.error(f"Hall lamp: {e}")
 
         want_c = plan.get("conservatory")
         if cons_id and want_c is not None:
             try:
+                if only_if_different and self._state_of(cons_id, "onState") is want_c:
+                    return
                 indigo.device.turnOn(int(cons_id)) if want_c else indigo.device.turnOff(int(cons_id))
             except Exception as e:
                 self.logger.error(f"Conservatory lamp: {e}")
+
+    @staticmethod
+    def _lamp_is_off(lamp):
+        return getattr(lamp, "onState", None) is False
+
+    @staticmethod
+    def _lamp_shows(lamp, rgb):
+        """True when the lamp is on at full brightness in exactly this colour.
+
+        A level that cannot be read counts as different, so the reconcile
+        errs towards putting the lamp right rather than leaving it wrong.
+        """
+        if getattr(lamp, "onState", None) is not True:
+            return False
+        if getattr(lamp, "brightness", None) != 100:
+            return False
+        try:
+            have = (int(lamp.redLevel), int(lamp.greenLevel), int(lamp.blueLevel))
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return have == tuple(rgb)
 
     def _mirror_homekit(self, dev, state, props):
         var = props.get("homekitVariable")

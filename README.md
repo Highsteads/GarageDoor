@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.11 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.11.1 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -49,6 +49,8 @@ I wrote it because six different scripts and pages in my Indigo system each work
 The [full guide](https://highsteads.github.io/GarageDoor/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v1.11.1** — Saving the settings now names the mode you just chose, not the one you left. Turning Shadow Mode off also sets the hall and conservatory lamps to suit the door as it is now, instead of waiting for the door to move, and leaves any lamp that is already right alone.
 
 **v1.11** — A contact sensor that is switched off, in error or offline no longer counts, so the door shows Unknown and names the sensor instead of saying closed on a stale reading. Open and Close will not guess while the door is Unknown. A restart carries on the left-open count instead of starting it again, and the garage light is tried again if a command fails.
 

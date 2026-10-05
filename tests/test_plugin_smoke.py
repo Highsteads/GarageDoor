@@ -910,3 +910,140 @@ def test_turning_shadow_mode_off_brings_the_light_into_line(plugin):
     p.pluginPrefs["shadowMode"] = "false"
     p._evaluate(door.id)
     assert ("on", 104) in ind.commands, "the light must be commanded once control is live"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.11.1 — the saved Shadow Mode, and the lamps follow a mode change
+# ══════════════════════════════════════════════════════════════════════
+
+def _info_lines(p):
+    said = []
+    p.logger.info = lambda m, *a, **k: said.append(str(m))
+    return said
+
+
+@pytest.mark.parametrize("stale, saved, word", [
+    ("true", False, "ENABLED"),            # Shadow Mode switched off
+    ("true", "false", "ENABLED"),          # ... saved as a string, as Indigo does
+    ("false", True, "SHADOW MODE"),        # Shadow Mode switched on
+    ("false", "true", "SHADOW MODE"),
+])
+def test_the_saved_dialog_names_the_new_mode_not_the_old_one(plugin, stale, saved, word):
+    """Indigo may not have copied the new values into pluginPrefs when
+    closedPrefsConfigUi runs, so the log line has to come from valuesDict."""
+    p, _, _, _ = plugin
+    p.pluginPrefs["shadowMode"] = stale             # what pluginPrefs still holds
+    said = _info_lines(p)
+    p.closedPrefsConfigUi({"logLevel": "INFO", "shadowMode": saved}, False)
+    line = [m for m in said if "Configuration saved" in m]
+    assert len(line) == 1 and word in line[0], line
+
+
+def test_a_blank_shadow_field_in_the_saved_dialog_keeps_the_current_mode(plugin):
+    p, _, _, _ = plugin
+    p.pluginPrefs["shadowMode"] = "false"
+    said = _info_lines(p)
+    p.closedPrefsConfigUi({"logLevel": "INFO"}, False)
+    line = [m for m in said if "Configuration saved" in m]
+    assert line and "ENABLED" in line[0], line
+
+
+def _wired_lamps(ind, hall_on=False, hall_rgb=None, cons_on=False, ref=""):
+    hall = FakeDevice(301, "Hall Lamp", {"onState": hall_on})
+    if hall_rgb is not None:
+        hall.redLevel, hall.greenLevel, hall.blueLevel = hall_rgb
+        hall.brightness = 100
+    ind.devices.add(hall)
+    ind.devices.add(FakeDevice(302, "Conservatory", {"onOffState": cons_on}))
+    ind.devices[302].onState = cons_on
+    return _lamp_door(ind, ref)
+
+
+def test_turning_shadow_mode_off_sets_the_lamps_for_an_open_door(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind)
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)                           # shadow: nothing sent
+    assert _lamp_commands(ind) == []
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    assert ("on", 302) in ind.commands, "the conservatory lamp must come on"
+    assert any(c[0] == "color" and c[1] == 301 and c[2] == {
+        "redLevel": 100, "greenLevel": 0, "blueLevel": 0} for c in ind.commands), \
+        "the hall lamp must show the open colour"
+
+
+def test_the_lamp_reconcile_runs_once_not_every_tick(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind)
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    sent = len(_lamp_commands(ind))
+    assert sent
+    p._evaluate(door.id)
+    p._evaluate(door.id)
+    assert len(_lamp_commands(ind)) == sent, "a person's own change to a lamp must not be fought"
+
+
+def test_the_reconcile_leaves_a_lamp_that_is_already_right(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind, hall_on=True, hall_rgb=(100, 0, 0), cons_on=False)
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    assert not any(c[1] == 301 for c in _lamp_commands(ind)), "the hall lamp already shows open"
+    assert ("on", 302) in ind.commands, "the conservatory lamp was off and must come on"
+
+
+def test_the_reconcile_leaves_both_lamps_when_both_are_right(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind, hall_on=True, hall_rgb=(100, 0, 0), cons_on=True)
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    assert _lamp_commands(ind) == []
+
+
+def test_the_reconcile_switches_lamps_off_for_a_shut_door(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind, hall_on=True, hall_rgb=(100, 0, 0), cons_on=True)
+    p.startup()
+    p.deviceStartComm(door)                           # shut, shadow
+    assert _lamp_commands(ind) == []
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    assert ("off", 301) in ind.commands and ("off", 302) in ind.commands
+
+
+def test_the_reconcile_does_nothing_in_shadow_mode(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind)
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)
+    p.pluginPrefs["shadowMode"] = "false"
+    p.pluginPrefs["shadowMode"] = "true"              # flipped back before a tick
+    p._evaluate(door.id)
+    p._evaluate(door.id)
+    assert _lamp_commands(ind) == []
+
+
+def test_going_back_into_shadow_mode_sends_nothing(plugin):
+    p, ind, _, _ = plugin
+    door = _wired_lamps(ind)
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)
+    ind.commands.clear()
+    p.pluginPrefs["shadowMode"] = "true"
+    p._evaluate(door.id)
+    assert _lamp_commands(ind) == []

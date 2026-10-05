@@ -73,6 +73,8 @@ This is optional. I use it so anyone in the house can see what the garage door i
 
 Each time the colour lamp is given a colour, it is also set to full brightness.
 
+When you untick **Shadow Mode**, the plugin sets the lamps to suit the door as it is, without waiting for the door to move. A lamp that is already showing the right thing is left alone. It does this once, so if you change a lamp by hand afterwards the plugin does not change it back.
+
 When the door closes, the lamps go back to how the house had them, judged by a **reference lamp** you pick — a lamp elsewhere in the house that is on in the evening and off during the day, say:
 
 - If the reference lamp is on, the colour lamp goes to the restore colour and white temperature, and the second lamp comes on.
