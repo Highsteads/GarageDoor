@@ -11,8 +11,8 @@ The plugin's actions are listed under **Garage Door** when you add an action to 
 
 | Action | What it does |
 |---|---|
-| **Open Garage Door** | Presses the relay, unless the door is already open, in which case it writes "already open, nothing to do" to the Event Log and does nothing. |
-| **Close Garage Door** | Presses the relay, unless the door is already closed, in which case it does nothing. |
+| **Open Garage Door** | Presses the relay, unless the door is already open, in which case it writes "already open, nothing to do" to the Event Log and does nothing. It also does nothing while the door shows **Unknown**, because a press then might close a door that is really open. |
+| **Close Garage Door** | Presses the relay, unless the door is already closed, in which case it does nothing. Like Open, it does nothing while the door shows **Unknown**. **Toggle** still presses the button if you mean to. |
 | **Toggle Garage Door** | Presses the relay, whatever the door is doing. This suits a wall button. |
 | **Pulse Relay (diagnostic)** | Presses the relay, whatever the door is doing, for testing. **Last operated by** shows your note, or **action:pulse** if you left it blank. |
 | **Re-read Door State** | Reads both sensors again and writes where the door is to the Event Log, with your note on the end if you typed one. It does not press the relay. |
@@ -41,7 +41,7 @@ To use one, create a new trigger, set its type to **Garage Door**, choose the ev
 | **Garage Door Left Open** | The plugin raises a level 1 alert — the door has been open for the first alert time — and again at each repeat. |
 | **Garage Door Still Open (urgent)** | The plugin raises a level 2, urgent, alert, and again at each repeat. |
 | **Garage Door Stuck Part-Way** | The door has been between the two ends for longer than the travel timeout. The alarm goes urgent at the same moment, so **Garage Door Still Open (urgent)** runs too, unless the alarm was urgent already. |
-| **Garage Door Sensor Fault** | Both sensors say the door is at their end, which cannot be true. |
+| **Garage Door Sensor Fault** | Both sensors say the door is at their end, which cannot be true, or a sensor has been switched off, marked as in error or offline by its plugin, or deleted. **Sensor problem** on the device says which. |
 
 The [How it works](how-it-works.md) page explains when each alert is raised and at which level.
 

@@ -482,3 +482,48 @@ def test_events_xml_has_opening_and_closing_events():
     xml = next(pathlib.Path(__file__).resolve().parents[1].glob(
         "*.indigoPlugin/Contents/Server Plugin/Events.xml")).read_text()
     assert 'id="doorStartedOpening"' in xml and 'id="doorStartedClosing"' in xml
+
+
+# ── v1.3: unusable contacts, and seeding the left-open clock ─────────────
+
+def test_contact_problem_names_each_way_a_reading_is_unusable():
+    assert g.contact_problem() is None
+    assert g.contact_problem(enabled=False) == "is disabled"
+    assert g.contact_problem(error_state="offline") == "is offline"
+    assert g.contact_problem(error_state="timeout") == "is in error (timeout)"
+    assert g.contact_problem(availability="Offline") == "is offline"
+    assert g.contact_problem(availability="online") is None
+    assert g.contact_problem(error_state=None) is None
+
+
+def test_an_unusable_contact_makes_the_door_unknown_whatever_it_last_said():
+    state, healthy, problem = g.assess_door(True, False, bottom_problem="the bottom is offline")
+    assert (state, healthy) == (g.UNKNOWN, False)
+    assert problem == "the bottom is offline"
+
+
+def test_assess_door_keeps_the_old_answers_when_the_sensors_are_usable():
+    assert g.assess_door(True, False) == (g.CLOSED, True, "")
+    assert g.assess_door(None, False) == (g.UNKNOWN, True, "")
+    assert g.assess_door(True, True) == (g.UNKNOWN, False, g.CONTRADICTION)
+
+
+def test_seed_prefers_a_stored_time_only_while_the_heartbeat_is_fresh():
+    now = 1_000_000.0
+    assert g.seed_left_closed_at(now, stored=now - 600, heartbeat=now - 30) == (now - 600, "stored")
+    assert g.seed_left_closed_at(now, stored=now - 600, heartbeat=now - 7200,
+                                 contact_changed=now - 300) == (now - 300, "contact")
+
+
+def test_seed_refuses_times_in_the_future_or_absurdly_old():
+    now = 1_000_000_000.0
+    assert g.seed_left_closed_at(now, contact_changed=now + 3600) == (now, "now")
+    assert g.seed_left_closed_at(now, contact_changed=now - 40 * 86400) == (now, "now")
+    assert g.seed_left_closed_at(now, contact_changed=now - 300,
+                                 contact_usable=False) == (now, "now")
+
+
+def test_parse_stamp_round_trips_and_rejects_rubbish():
+    assert g.parse_stamp("") is None
+    assert g.parse_stamp("not a time") is None
+    assert g.parse_stamp("2026-10-05 14:02:00") is not None

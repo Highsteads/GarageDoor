@@ -5,8 +5,13 @@
 #              Indigo import — the door's state, when to raise the alarm, when
 #              to light the garage, and what to publish for HomeKit.
 # Author:      CliveS & Claude Opus 5
-# Date:        31-08-2026
-# Version:     1.2
+# Date:        05-10-2026
+# Version:     1.3
+#
+# v1.3 (05-10-2026): contact_problem() and assess_door() — a contact that is
+# disabled, in error or reported offline is no reading at all, so the door is
+# unknown and the sensors unhealthy rather than "closed" on a stale value.
+# seed_left_closed_at() lets a restart keep the time the door was opened.
 #
 # v1.2 (27-09-2026): the pulse length and repeat-press window are now real
 # DEFAULTS, so cfg_get reads them instead of returning None; the lux threshold
@@ -26,6 +31,7 @@
 # so the tests exercise what actually ships rather than a copy of it.
 
 import math
+from datetime import datetime
 
 # ── door states ──────────────────────────────────────────────────────────
 CLOSED  = "closed"
@@ -197,6 +203,88 @@ def derive_state(bottom_contact, top_contact, moving_seconds=0.0, cfg=None):
     if moving_seconds > timeout:
         return STUCK, True
     return MOVING, True
+
+
+CONTRADICTION = ("both contact sensors report the door is at their end, "
+                 "which cannot both be true")
+
+
+def contact_problem(enabled=True, error_state="", availability=None):
+    """Why a contact sensor's reading cannot be used, or None if it can.
+
+    A sensor's plugin can lose it and keep its last value: Zigbee2MQTTBridge
+    sets the device's error to "offline" and leaves `contact` as it was. Read
+    straight, that stale value is indistinguishable from a live one, so a
+    garage bridge that dropped left the door "closed" with healthy sensors.
+    Disabled, in error, or reported offline: none of these is a reading.
+    """
+    if enabled is False:
+        return "is disabled"
+    err = str(error_state or "").strip()
+    if err:
+        return "is offline" if err.lower() == "offline" else f"is in error ({err})"
+    if str(availability or "").strip().lower() == "offline":
+        return "is offline"
+    return None
+
+
+def assess_door(bottom_contact, top_contact, moving_seconds=0.0, cfg=None,
+                bottom_problem=None, top_problem=None):
+    """derive_state, plus what is wrong with the sensors.
+
+    Returns (state, sensors_healthy, problem). A contact that cannot be used
+    (bottom_problem / top_problem, each a sentence naming the sensor) makes
+    the door UNKNOWN and the sensors unhealthy, whatever its last value said.
+    A sensor that simply has no reading yet stays unknown and healthy, as it
+    always has; two contacts that contradict each other stay unknown and
+    unhealthy. `problem` is "" when there is nothing to say.
+    """
+    problems = [p for p in (bottom_problem, top_problem) if p]
+    if problems:
+        return UNKNOWN, False, " and ".join(problems)
+    state, healthy = derive_state(bottom_contact, top_contact, moving_seconds, cfg)
+    return state, healthy, ("" if healthy else CONTRADICTION)
+
+
+STAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+SEED_MAX_AGE_S   = 30 * 86400   # a door "open for a month" is a bad clock, not a door
+SEED_HEARTBEAT_S = 30 * 60      # the plugin was watching this recently enough to trust
+SEED_SKEW_S      = 60
+
+
+def parse_stamp(text):
+    """A state written as STAMP_FORMAT, back to epoch seconds, or None."""
+    try:
+        return datetime.strptime(str(text or "").strip(), STAMP_FORMAT).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def seed_left_closed_at(now, stored=None, heartbeat=None, contact_changed=None,
+                        contact_usable=True):
+    """When an already-open door left closed, for a plugin that has just started.
+
+    Returns (epoch, source), source being "stored", "contact" or "now".
+
+    - "stored": the time this plugin saved before it stopped. Trusted only if
+      the door device was written recently (`heartbeat`, its lastChanged — an
+      open door's minute counter is rewritten every minute), because during a
+      long outage the door could have shut and opened again unseen.
+    - "contact": the bottom contact's lastChanged. Any later state write on
+      that device moves it forward, never back, so it can only UNDER-state how
+      long the door has been open — late, never early.
+    - "now": nothing believable, so the clock starts again, as it always did.
+    Every candidate must be in the past and less than SEED_MAX_AGE_S old.
+    """
+    def sane(t):
+        return t is not None and (now - SEED_MAX_AGE_S) <= t <= (now + SEED_SKEW_S)
+
+    if (sane(stored) and heartbeat is not None
+            and -SEED_SKEW_S <= (now - heartbeat) <= SEED_HEARTBEAT_S):
+        return min(stored, now), "stored"
+    if contact_usable and sane(contact_changed):
+        return min(contact_changed, now), "contact"
+    return now, "now"
 
 
 OPENING = "opening"

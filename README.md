@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.10 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.11 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -50,13 +50,13 @@ The [full guide](https://highsteads.github.io/GarageDoor/) goes through each ste
 
 ## What's new
 
+**v1.11** — A contact sensor that is switched off, in error or offline no longer counts, so the door shows Unknown and names the sensor instead of saying closed on a stale reading. Open and Close will not guess while the door is Unknown. A restart carries on the left-open count instead of starting it again, and the garage light is tried again if a command fails.
+
 **v1.10** — The Door state now reads opening or closing while the door travels, so every trigger, script and dashboard knows which way it is going. Two new events fire when it starts opening and when it starts closing.
 
 **v1.9** — The door now says which way it is travelling. A new Direction of travel state reads opening or closing while the door is between its two ends, worked out from the end it was last seen at, and the Event Log says "opening" or "closing" instead of "moving". A page opened part-way through a trip can show the right word at once.
 
 **v1.8** — Pulse length, the repeat-press window and the logging level now do what they say, and the garage light comes on without a light-level sensor, going by your "Dark" variable instead. Test Garage Door Setup now checks the lamps too.
-
-**v1.7** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
 
 Every version is listed in the [version history](https://highsteads.github.io/GarageDoor/changelog.html).
 

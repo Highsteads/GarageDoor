@@ -13,7 +13,7 @@ The plugin cannot tell where the door is.
 
 - If the Event Log says the door is **not configured yet**, open the door device and pick both contact sensors.
 - If **Test Garage Door Setup** says **FAIL** for a sensor, it either no longer exists or has no **contact** state. Pick the right device, or a sensor that has one.
-- If **Sensors healthy** is false, both sensors say the door is at their end at once. Check that each magnet is still in line with its sensor, and that you have not picked the same sensor twice.
+- If **Sensors healthy** is false, read **Sensor problem** on the device. If it says a sensor is offline or in error, the plugin that owns that sensor has lost it: for a Zigbee sensor, check the Zigbee bridge is running and the sensor's battery. If it says both sensors report the door at their end, check that each magnet is still in line with its sensor, and that you have not picked the same sensor twice.
 - If one sensor has simply not reported yet, open and close the door once.
 
 ## The door shows "Open" when it is shut, or the other way round
@@ -29,6 +29,7 @@ The door took longer than the travel timeout to get from one end to the other. L
 - If the Event Log has a line marked `[shadow]` saying the plugin would have pulsed the relay, Shadow Mode is on. The [Shadow Mode](shadow-mode.md) page explains when and how to turn it off.
 - If it says **ignoring a repeat operation**, two presses came closer together than **Ignore repeat operations within (s)**, five seconds to start with, and the second was ignored on purpose.
 - If it says **already open, nothing to do** or **already closed, nothing to do**, the plugin believes the door is already there. Check the door device shows the right position.
+- If it says **not asked to open** or **not asked to close**, the door shows **Unknown**, so the plugin will not guess which way a press would send it. Sort out the sensors first, or use **Toggle** to press the button anyway.
 - If it says **no relay configured**, pick the relay in the door's settings.
 - If it says **relay pulse failed**, the relay device could not be switched. Check the relay works from Indigo on its own.
 

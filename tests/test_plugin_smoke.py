@@ -17,6 +17,7 @@
 import os
 import sys
 import types
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -35,10 +36,18 @@ class FakeDevice:
         self.pluginProps = dict(props or {})
         self.onState = self.states.get("onState")
         self.written = []
+        # Like Indigo: every device has these, and a state write refreshes
+        # lastChanged and clears the error unless told not to.
+        self.enabled = True
+        self.errorState = ""
+        self.lastChanged = datetime.now()
 
-    def updateStateOnServer(self, key, value):
+    def updateStateOnServer(self, key, value, clearErrorState=True):
         self.states[key] = value
         self.written.append((key, value))
+        self.lastChanged = datetime.now()
+        if clearErrorState:
+            self.errorState = ""
 
 
 class FakeVariable:
@@ -656,3 +665,248 @@ def test_a_plugin_started_mid_travel_says_none_until_the_door_settles(plugin):
     p.deviceStartComm(door)
     assert door.states["doorState"] == "moving"
     assert door.states["direction"] == "none"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.11 — a contact that is offline, disabled or in error is not a reading
+# ══════════════════════════════════════════════════════════════════════
+#
+# Zigbee2MQTTBridge marks a sensor it has lost "offline" in errorState and
+# leaves its last `contact` value in place. Read straight, that stale value
+# kept the door "closed" with healthy sensors while the garage bridge was down.
+
+def _said(p):
+    out = {"warning": [], "info": [], "error": []}
+    for level in out:
+        setattr(p.logger, level, lambda m, *a, _l=level, **k: out[_l].append(str(m)))
+    return out
+
+
+def test_a_contact_in_error_is_unknown_not_closed(plugin):
+    p, ind, door, _ = plugin
+    ind.devices[101].errorState = "offline"          # contact still True, but stale
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+    assert "Bottom Contact" in door.states["sensorProblem"]
+    assert "offline" in door.states["sensorProblem"]
+
+
+def test_a_disabled_contact_is_unknown(plugin):
+    p, ind, door, _ = plugin
+    ind.devices[102].enabled = False
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+    assert "Top Contact" in door.states["sensorProblem"]
+    assert "disabled" in door.states["sensorProblem"]
+
+
+def test_a_contact_whose_availability_is_offline_is_unknown(plugin):
+    p, ind, door, _ = plugin
+    ind.devices[101].states["availability"] = "offline"
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+
+
+def test_a_contact_device_that_has_gone_is_unknown_and_unhealthy(plugin):
+    p, ind, door, _ = plugin
+    door.pluginProps["bottomContactId"] = "999999"
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+    assert "999999" in door.states["sensorProblem"]
+
+
+def test_both_contacts_going_stale_is_a_sensor_fault_not_a_closed_door(plugin):
+    """The finding: the garage bridge drops, both sensors go offline, and the
+    door must stop claiming closed."""
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "closed"
+    trig = types.SimpleNamespace(id=8, name="f", pluginTypeId="sensorFault", pluginProps={})
+    p.triggerStartProcessing(trig)
+    said = _said(p)
+    ind.devices[101].errorState = "offline"
+    ind.devices[102].errorState = "offline"
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+    assert ("trigger", "sensorFault") in ind.commands
+    hits = [m for m in said["warning"] if "Bottom Contact" in m and "Top Contact" in m]
+    assert len(hits) == 1, said["warning"]
+    p._evaluate(door.id)                              # said once, not every tick
+    assert len([m for m in said["warning"] if "Bottom Contact" in m]) == 1
+
+
+def test_a_contact_coming_back_clears_the_problem(plugin):
+    p, ind, door, _ = plugin
+    ind.devices[101].errorState = "offline"
+    p.startup()
+    p.deviceStartComm(door)
+    ind.devices[101].errorState = ""
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "closed"
+    assert door.states["sensorsHealthy"] is True
+    assert door.states["sensorProblem"] == ""
+
+
+def test_a_contact_with_no_reading_yet_is_still_unknown_and_healthy(plugin):
+    """Unchanged: a sensor that has never reported is silent, not faulty."""
+    p, ind, door, _ = plugin
+    del ind.devices[101].states["contact"]
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is True
+
+
+def test_contradictory_contacts_still_read_unknown_and_unhealthy(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    trig = types.SimpleNamespace(id=9, name="f", pluginTypeId="sensorFault", pluginProps={})
+    p.triggerStartProcessing(trig)
+    ind.devices[102].states["contact"] = True         # both ends at once
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "unknown"
+    assert door.states["sensorsHealthy"] is False
+    assert "cannot both be true" in door.states["sensorProblem"]
+    assert ("trigger", "sensorFault") in ind.commands
+
+
+def test_open_and_close_refuse_to_guess_while_the_position_is_unknown(plugin):
+    """A press on a door whose position is unknown could do the opposite of
+    what was asked, so Open and Close leave it alone."""
+    p, ind, door, _ = plugin
+    p.pluginPrefs["shadowMode"] = "false"
+    ind.devices[101].errorState = "offline"
+    ind.devices[102].errorState = "offline"
+    p.startup()
+    p.deviceStartComm(door)
+    ind.commands.clear()
+    p.actionOpenDoor(types.SimpleNamespace(deviceId=door.id, props={}))
+    p.actionCloseDoor(types.SimpleNamespace(deviceId=door.id, props={}))
+    assert [c for c in ind.commands if c[1] == 103] == []
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.11 — a restart does not restart the left-open clock
+# ══════════════════════════════════════════════════════════════════════
+
+def _open_contacts(ind):
+    ind.devices[101].states["contact"] = False
+    ind.devices[102].states["contact"] = True
+
+
+def _stamp(dt):
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def test_a_restart_keeps_the_time_the_door_was_opened(plugin):
+    p, ind, door, _ = plugin
+    _open_contacts(ind)
+    door.states["leftClosedAt"] = _stamp(datetime.now() - timedelta(minutes=20))
+    door.lastChanged = datetime.now() - timedelta(seconds=30)    # we were alive just now
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["openDurationMinutes"] == 20
+
+
+def test_without_a_saved_time_the_bottom_contact_dates_the_opening(plugin):
+    p, ind, door, _ = plugin
+    _open_contacts(ind)
+    ind.devices[101].lastChanged = datetime.now() - timedelta(minutes=12)
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["openDurationMinutes"] == 12
+
+
+def test_a_saved_time_from_a_long_outage_is_not_trusted(plugin):
+    """The door may have shut and opened again while nothing was watching."""
+    p, ind, door, _ = plugin
+    _open_contacts(ind)
+    door.states["leftClosedAt"] = _stamp(datetime.now() - timedelta(hours=5))
+    door.lastChanged = datetime.now() - timedelta(hours=3)
+    ind.devices[101].lastChanged = datetime.now() - timedelta(minutes=7)
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["openDurationMinutes"] == 7
+
+
+def test_an_impossible_contact_time_falls_back_to_now(plugin):
+    p, ind, door, _ = plugin
+    _open_contacts(ind)
+    ind.devices[101].lastChanged = datetime.now() + timedelta(hours=2)
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["openDurationMinutes"] == 0
+
+
+def test_a_restart_does_not_repeat_an_alert_already_sent(plugin):
+    p, ind, door, _ = plugin
+    _open_contacts(ind)
+    now = datetime.now()
+    door.states["leftClosedAt"] = _stamp(now - timedelta(minutes=20))
+    door.states["alertLevel"] = 1
+    door.states["lastAlertSent"] = _stamp(now - timedelta(minutes=5))
+    door.lastChanged = now - timedelta(seconds=30)
+    for tid, ev in ((10, "doorLeftOpen"), (11, "doorStillOpen")):
+        p.triggerStartProcessing(types.SimpleNamespace(id=tid, name=ev, pluginTypeId=ev,
+                                                       pluginProps={}))
+    p.startup()
+    p.deviceStartComm(door)
+    assert door.states["alertLevel"] == 1
+    assert [c for c in ind.commands if c[0] == "trigger"] == []
+
+
+def test_the_saved_times_are_cleared_when_the_door_closes(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    _open_contacts(ind)
+    p._evaluate(door.id)
+    assert door.states["leftClosedAt"]
+    ind.devices[101].states["contact"] = True
+    ind.devices[102].states["contact"] = False
+    p._evaluate(door.id)
+    assert door.states["leftClosedAt"] == ""
+    assert door.states["lastAlertSent"] == ""
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v1.11 — the light is only "done" once the command has gone
+# ══════════════════════════════════════════════════════════════════════
+
+def test_a_failed_light_command_is_tried_again(plugin, monkeypatch):
+    p, ind, door, plugin_mod = plugin
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(plugin_mod.time, "time", lambda: clock["t"])
+    p.pluginPrefs["shadowMode"] = "false"
+    p.startup()
+    p.deviceStartComm(door)
+    original = ind.device.turnOn
+    ind.device.turnOn = lambda i: (_ for _ in ()).throw(RuntimeError("busy"))
+    _open_contacts(ind)
+    p._evaluate(door.id)                              # the command raises
+    ind.device.turnOn = original
+    clock["t"] += 120
+    p._evaluate(door.id)
+    assert ("on", 104) in ind.commands, "a light command that failed must be retried"
+
+
+def test_turning_shadow_mode_off_brings_the_light_into_line(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    _open_contacts(ind)
+    p.deviceStartComm(door)                           # shadow: would turn it on
+    assert ("on", 104) not in ind.commands
+    p.pluginPrefs["shadowMode"] = "false"
+    p._evaluate(door.id)
+    assert ("on", 104) in ind.commands, "the light must be commanded once control is live"

@@ -7,6 +7,15 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.11 — 5 October 2026
+
+The door no longer says closed on the word of a sensor that has stopped working.
+
+- **A sensor its plugin has lost no longer counts.** If either contact sensor is switched off in Indigo, marked as in error or offline by its plugin, or deleted, the door shows **Unknown**, **Sensors healthy** goes false, and the new **Sensor problem** state names the sensor. The plugin logs a warning and runs your **Garage Door Sensor Fault** triggers. Before, Zigbee2MQTT Bridge marked a lost sensor offline and kept its last reading, so the door could stay **Closed** with healthy sensors while the garage was off the network.
+- **Open and Close do nothing while the door shows Unknown**, because a press then might do the opposite of what you asked. **Toggle** still presses the button.
+- **A restart no longer starts the left-open count again.** The plugin saves when the door was opened (the new **Open since** state) and carries on from there, without sending an alert again that it had already sent. If the plugin was stopped for more than half an hour it goes by when the bottom sensor last changed instead.
+- **The garage light is tried again if a command fails**, once a minute, and turning **Shadow Mode** off now switches it to where it should be straight away. Before, a failed command was never repeated, and the light did nothing after Shadow Mode went off until the door next moved.
+
 ## 1.10 — 3 October 2026
 
 The door's own state now says which way it is travelling.

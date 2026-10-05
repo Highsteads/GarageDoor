@@ -20,7 +20,7 @@ The device list shows one of these:
 | **Opening** / **Closing** | Neither sensor sees the door, and the plugin knows which end it left. |
 | **Moving** | Neither sensor sees the door and the plugin does not know which way it is going (it started part-way through a trip). |
 | **Stuck** | Neither sensor has seen the door for longer than the travel timeout, 30 seconds to start with. It stays **Stuck** until a sensor sees the door again. |
-| **Unknown** | One of the sensors has no reading, or both sensors say the door is at their end, which cannot be true. |
+| **Unknown** | One of the sensors has no reading, is switched off, is marked as in error or offline by its plugin, or both sensors say the door is at their end, which cannot be true. |
 
 Only **Closed** counts as shut. **Unknown** is never taken as closed, so the alarm, the light and the lamps treat it as a door that may be open.
 
@@ -33,10 +33,13 @@ These are the names you see when you build a trigger or a control page.
 | **Door state** | Closed, Opening, Open, Closing, Moving, Stuck or Unknown, as above. |
 | **Direction of travel** | **opening** or **closing** while the door is between its two ends, worked out from the end it was last seen at, and **none** otherwise. A page or trigger that opens mid-trip can use it to say which way the door is going. |
 | **Is open** | True only when the door is fully open, not while it is moving or stuck. |
-| **Minutes open** | How many whole minutes since the door last left the closed position, and 0 when it is closed. If the plugin restarts while the door is open, the count starts again from the restart. |
+| **Minutes open** | How many whole minutes since the door last left the closed position, and 0 when it is closed. If the plugin restarts while the door is open, the count carries on from when the door was opened. |
+| **Open since** | The date and time the door last left the closed position, and blank while it is closed. |
+| **Last left-open alert** | When the plugin last raised a left-open alert for this opening, and blank while the door is closed or before the first alert. |
 | **Alert level** | 0 when all is well, 1 when the door has been left open, and 2 when that has become urgent. The [How it works](how-it-works.md) page explains when each one applies. |
 | **Last travel time (s)** | How many seconds the door took on its last trip, from leaving one end to reaching an end. A door that gets slower over the months can be a sign the springs need attention. |
-| **Sensors healthy** | False when both sensors say the door is at their end at once, which usually means a sensor or magnet has come loose. |
+| **Sensors healthy** | False when a sensor is switched off, marked as in error or offline by its plugin, or no longer exists, and when both sensors say the door is at their end at once, which usually means a sensor or magnet has come loose. |
+| **Sensor problem** | What is wrong, in a sentence that names the sensor, such as "the bottom contact sensor 'Garage Bottom' is offline". Blank when nothing is. |
 | **Last opened** | The date and time the door last reached the top, such as `2026-09-27 08:15:04`. |
 | **Last closed** | The date and time the door last reached the bottom. |
 | **Last operated by** | What last pressed the relay through the plugin. It shows the note you typed into the action, or, if you left the note blank, **action:open**, **action:close**, **action:toggle** or **action:pulse**. It only changes when the relay is really pressed, so not in Shadow Mode. |

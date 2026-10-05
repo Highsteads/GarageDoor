@@ -171,6 +171,21 @@
                 <TriggerLabel>Sensors healthy</TriggerLabel>
                 <ControlPageLabel>Sensors healthy</ControlPageLabel>
             </State>
+            <State id="sensorProblem">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Sensor problem</TriggerLabel>
+                <ControlPageLabel>Sensor problem</ControlPageLabel>
+            </State>
+            <State id="leftClosedAt">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Open since</TriggerLabel>
+                <ControlPageLabel>Open since</ControlPageLabel>
+            </State>
+            <State id="lastAlertSent">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last left-open alert</TriggerLabel>
+                <ControlPageLabel>Last left-open alert</ControlPageLabel>
+            </State>
             <State id="lastOpened">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Last opened</TriggerLabel>

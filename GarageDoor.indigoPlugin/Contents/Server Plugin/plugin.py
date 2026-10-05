@@ -5,8 +5,17 @@
 #              how long it has been open, the alarm when it is left that way,
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
-# Date:        27-09-2026
-# Version:     1.10
+# Date:        05-10-2026
+# Version:     1.11
+#
+# v1.11 (05-10-2026, Claude Opus 5.5): a contact sensor that is disabled, in
+# error or reported offline is no reading, so the door reads Unknown with
+# Sensors healthy false and a Sensor problem naming the sensor, instead of
+# "closed" on the stale value Zigbee2MQTTBridge leaves behind; Open and Close
+# refuse to guess while the position is unknown. A restart keeps the time the
+# door was opened and does not repeat an alert already sent. The garage light
+# is only marked done once the command has gone, so a failed command is tried
+# again and turning Shadow Mode off brings the light into line.
 #
 # v1.10 (03-10-2026, Claude Sonnet 5.5): the Door state itself now reads
 # opening or closing while the door travels (moving only when the direction is
@@ -63,6 +72,7 @@ import garage_logic as G
 PLUGIN_ID = "com.clives.indigoplugin.garagedoor"
 
 TICK_SECONDS = 1.0          # fine enough to time travel, cheap enough to ignore
+LIGHT_RETRY_SECONDS = 60    # how soon a light command that raised is tried again
 
 # Events declared in Events.xml
 EV_OPENED       = "doorOpened"
@@ -166,7 +176,18 @@ class Plugin(indigo.PluginBase):
             "last_notified_min": None,
             "last_pulse_at": 0.0,
             "operated_by": "",
-            "light_want": None,
+            "light_want": None,         # last light command that actually went
+            "light_mode": None,         # shadow flag when light_want was set
+            "light_fail_at": None,      # when a light command last raised
+            "problem": None,            # what is wrong with the sensors, "" = nothing
+            # What this door looked like before the plugin stopped, so a
+            # restart with the door open does not start its clock again.
+            "seed": {
+                "stored":      G.parse_stamp(dev.states.get("leftClosedAt")),
+                "heartbeat":   self._epoch(getattr(dev, "lastChanged", None)),
+                "alert_level": dev.states.get("alertLevel"),
+                "alert_sent":  G.parse_stamp(dev.states.get("lastAlertSent")),
+            },
         }
         # Index the contacts so deviceUpdated is a dict lookup, not a scan.
         for key in ("bottomContactId", "topContactId"):
@@ -253,6 +274,41 @@ class Plugin(indigo.PluginBase):
         return None
 
     @staticmethod
+    def _epoch(value):
+        """A device's datetime attribute (e.g. lastChanged) as epoch seconds."""
+        try:
+            return value.timestamp()
+        except (AttributeError, TypeError, ValueError, OverflowError, OSError):
+            return None
+
+    @staticmethod
+    def _contact(dev_id, label):
+        """One position contact: (value, problem, lastChanged epoch).
+
+        problem is None when the reading can be used, otherwise a sentence
+        naming the sensor. A contact left blank in the settings is not a
+        problem, just not configured yet. Only `contact` is read: it means the
+        reed is made, the exact inverse of the device's own onState.
+        """
+        if not dev_id:
+            return None, None, None
+        try:
+            d = indigo.devices[int(dev_id)]
+        except (KeyError, ValueError, TypeError):
+            return None, f"the {label} sensor (device {dev_id}) does not exist", None
+        try:
+            states = d.states
+            why = G.contact_problem(enabled=getattr(d, "enabled", True),
+                                    error_state=getattr(d, "errorState", ""),
+                                    availability=states.get("availability"))
+            changed = Plugin._epoch(getattr(d, "lastChanged", None))
+            if why:
+                return None, f"the {label} sensor '{d.name}' {why}", changed
+            return states.get("contact"), None, changed
+        except Exception as e:
+            return None, f"the {label} sensor (device {dev_id}) cannot be read: {e}", None
+
+    @staticmethod
     def _var_true(name_or_id):
         """Read a variable BY NAME, falling back to an id.
 
@@ -331,11 +387,12 @@ class Plugin(indigo.PluginBase):
         props = st["props"]
         now = time.time()
 
-        bottom = self._state_of(props.get("bottomContactId"), "contact")
-        top    = self._state_of(props.get("topContactId"), "contact")
+        bottom, b_prob, b_changed = self._contact(props.get("bottomContactId"), "bottom contact")
+        top,    t_prob, _         = self._contact(props.get("topContactId"), "top contact")
 
         moving_for = (now - st["moving_since"]) if st["moving_since"] else 0.0
-        state, healthy = G.derive_state(bottom, top, moving_for, props)
+        state, healthy, problem = G.assess_door(bottom, top, moving_for, props,
+                                                bottom_problem=b_prob, top_problem=t_prob)
 
         previous = st["state"]
         st["state"] = state
@@ -359,7 +416,10 @@ class Plugin(indigo.PluginBase):
                 st["last_level"] = G.ALERT_NONE
                 st["last_notified_min"] = None
             elif st["left_closed_at"] is None:
-                st["left_closed_at"] = now
+                if initial:
+                    self._seed_opening(dev, st, state, now, b_changed, b_prob)
+                else:
+                    st["left_closed_at"] = now
 
             if not initial:
                 if state == G.OPEN:
@@ -382,10 +442,16 @@ class Plugin(indigo.PluginBase):
             self._apply_lamps(dev, state, props)
             self._mirror_homekit(dev, state, props)
 
-        if not healthy and previous is not None and state != previous:
-            self.logger.warning(f"{dev.name}: both contact sensors report the door "
-                                "is at their end, which cannot both be true")
-            self._fire(EV_SENSOR_FAULT, dev)
+        # --- sensor problems ---------------------------------------------
+        # Said once when it starts or changes, not on every tick.
+        if problem and problem != st.get("problem"):
+            tail = "" if problem == G.CONTRADICTION else ", so the door's position is unknown"
+            self.logger.warning(f"{dev.name}: {problem}{tail}")
+            if not initial:
+                self._fire(EV_SENSOR_FAULT, dev)
+        elif not problem and st.get("problem"):
+            self.logger.info(f"{dev.name}: the contact sensors are reporting again")
+        st["problem"] = problem
 
         # --- states ------------------------------------------------------
         open_min = ((now - st["left_closed_at"]) / 60.0) if st["left_closed_at"] else 0.0
@@ -394,6 +460,9 @@ class Plugin(indigo.PluginBase):
         self._set(dev, "isOpen", state == G.OPEN)
         self._set(dev, "openDurationMinutes", int(open_min))
         self._set(dev, "sensorsHealthy", healthy)
+        self._set(dev, "sensorProblem", problem)
+        self._set(dev, "leftClosedAt",
+                  self._stamp(st["left_closed_at"]) if st["left_closed_at"] else "")
 
         # The light is evaluated EVERY tick, not just on a door transition.
         # Presence changes minutes after the door settles — somebody walks in —
@@ -412,11 +481,44 @@ class Plugin(indigo.PluginBase):
         if notify:
             st["last_level"] = level
             st["last_notified_min"] = open_min
+            self._set(dev, "lastAlertSent", self._stamp(now))
             msg = G.describe(state, open_min, away, night)
             self.logger.warning(f"{dev.name}: {msg}")
             self._fire(EV_STILL_OPEN if level == G.ALERT_URGENT else EV_LEFT_OPEN, dev)
         elif level != st["last_level"] and level == G.ALERT_NONE:
             st["last_level"] = level
+        if st["last_notified_min"] is None:
+            self._set(dev, "lastAlertSent", "")
+
+    def _seed_opening(self, dev, st, state, now, bottom_changed, bottom_problem):
+        """Start the left-open clock for a door that was already open at start.
+
+        Until v1.11 this was always "now", so every plugin restart with the
+        door open restarted the alarm and re-sent the first alert.
+        """
+        seed = st.get("seed") or {}
+        # The bottom contact's own lastChanged only dates the opening when the
+        # door is known to be off the bottom and that sensor is usable.
+        usable = state in (G.OPEN, G.MOVING, G.STUCK) and not bottom_problem
+        left, source = G.seed_left_closed_at(
+            now, stored=seed.get("stored"), heartbeat=seed.get("heartbeat"),
+            contact_changed=bottom_changed, contact_usable=usable)
+        st["left_closed_at"] = left
+        if source == "stored":
+            # Same opening as before the restart: carry on where the alarm was.
+            try:
+                level = max(G.ALERT_NONE, min(G.ALERT_URGENT, int(seed.get("alert_level") or 0)))
+            except (TypeError, ValueError):
+                level = G.ALERT_NONE
+            sent = seed.get("alert_sent")
+            if level and sent is not None and left <= sent <= now + G.SEED_SKEW_S:
+                st["last_level"] = level
+                st["last_notified_min"] = max(0.0, (sent - left) / 60.0)
+        if source != "now":
+            how = ("the time saved before the restart" if source == "stored"
+                   else "when the bottom sensor last changed")
+            self.logger.info(f"{dev.name}: open since {self._clock(left)} "
+                             f"(from {how})")
 
     def _set(self, dev, key, value):
         try:
@@ -426,8 +528,16 @@ class Plugin(indigo.PluginBase):
             self.logger.debug(f"Could not write {key}: {e}")
 
     @staticmethod
-    def _stamp():
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def _stamp(epoch=None):
+        when = datetime.now() if epoch is None else datetime.fromtimestamp(epoch)
+        return when.strftime(G.STAMP_FORMAT)
+
+    @staticmethod
+    def _clock(epoch):
+        """A time as a person says it, e.g. 2:05pm."""
+        t = datetime.fromtimestamp(epoch)
+        hour = t.hour % 12 or 12
+        return f"{hour}:{t.minute:02d}{'am' if t.hour < 12 else 'pm'}"
 
     # ------------------------------------------------------------------
     # Things that follow the door
@@ -470,19 +580,41 @@ class Plugin(indigo.PluginBase):
         if want is None:
             return                                  # no reading: leave it alone
 
+        # light_want records a command that actually WENT. Until v1.11 it was
+        # recorded before the command, so one that raised was never retried,
+        # and in shadow mode it marked the light done — turning shadow mode
+        # off then sent nothing until the answer next changed.
         st = self.doors.get(dev.id)
-        if st is not None:
-            if st.get("light_want") == want:
-                return                              # already said so, do not repeat
-            st["light_want"] = want
+        if st is None:
+            st = {}
+        shadow = self._shadow_mode()
+        if st.get("light_mode") != shadow:
+            st["light_mode"] = shadow               # mode changed: reconcile
+            st["light_want"] = None
+        if st.get("light_want") == want:
+            return                                  # already done, do not repeat
+        word = "on" if want else "off"
+        if shadow:
+            st["light_want"] = want                 # in shadow, "done" = said so
+            self.logger.debug(f"[shadow] would turn the garage light {word}")
+            return
+        failed_at = st.get("light_fail_at")
+        if failed_at is not None and (time.time() - failed_at) < LIGHT_RETRY_SECONDS:
+            return                                  # do not hammer a failing device
         try:
-            if self._shadow_mode():
-                self.logger.debug(f"[shadow] would turn the garage light "
-                                  f"{'on' if want else 'off'}")
-                return
             indigo.device.turnOn(int(light_id)) if want else indigo.device.turnOff(int(light_id))
         except Exception as e:
-            self.logger.error(f"Could not switch the garage light: {e}")
+            if failed_at is None:
+                self.logger.error(f"Could not switch the garage light {word}: {e} "
+                                  f"(trying again every {LIGHT_RETRY_SECONDS} seconds)")
+            else:
+                self.logger.debug(f"Garage light still not switching: {e}")
+            st["light_fail_at"] = time.time()
+            return
+        if failed_at is not None:
+            self.logger.info(f"{dev.name}: the garage light switched {word} after all")
+        st["light_fail_at"] = None
+        st["light_want"] = want
 
     def _apply_lamps(self, dev, state, props):
         """Drive the house lamps that announce the door.
@@ -645,6 +777,8 @@ class Plugin(indigo.PluginBase):
         if st.get("state") == G.OPEN:
             self.logger.info(f"{dev.name}: already open, nothing to do")
             return                                    # idempotent, per the spec
+        if self._refuse_unknown(dev, st, "open"):
+            return
         self._pulse(dev, action.props.get("source") or "action:open")
 
     def actionCloseDoor(self, action):
@@ -655,7 +789,23 @@ class Plugin(indigo.PluginBase):
         if st.get("state") == G.CLOSED:
             self.logger.info(f"{dev.name}: already closed, nothing to do")
             return
+        if self._refuse_unknown(dev, st, "close"):
+            return
         self._pulse(dev, action.props.get("source") or "action:close")
+
+    def _refuse_unknown(self, dev, st, verb):
+        """Open and Close do nothing while the position is unknown.
+
+        The opener has one button: a press on a door we cannot see might do the
+        opposite of what was asked. Toggle and Pulse Relay are a deliberate
+        press of that button, so they still work.
+        """
+        if st.get("state") not in (None, G.UNKNOWN):
+            return False
+        why = st.get("problem") or "the door's position is unknown"
+        self.logger.warning(f"{dev.name}: not asked to {verb} — {why}. "
+                            "Use Toggle if you mean to press the button anyway.")
+        return True
 
     def actionToggleDoor(self, action):
         dev = self._door_for(action)

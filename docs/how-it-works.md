@@ -16,8 +16,9 @@ The two contact sensors are **position sensors**. Each one only says whether the
 - neither sees the door — **Moving**, and **Stuck** once that has gone on longer than the travel timeout
 - both see the door — **Unknown**, because that cannot happen, and the plugin logs a warning and runs your **Garage Door Sensor Fault** triggers
 - either sensor has no reading at all — **Unknown**
+- either sensor is switched off in Indigo, marked as in error by its plugin, or reported offline — **Unknown**, with **Sensors healthy** false and **Sensor problem** naming the sensor, and the plugin logs a warning and runs your **Garage Door Sensor Fault** triggers
 
-A sensor that has never reported is not taken as either answer. The door is only called closed or open when both sensors have said so.
+A sensor that has never reported is not taken as either answer. Nor is a sensor its plugin has lost: Zigbee2MQTT Bridge, for one, marks a sensor offline and leaves its last reading in place, so a garage that went off the network used to stay **Closed**. The door is only called closed or open when both sensors have said so and both are working.
 
 The plugin hears straight away when either sensor changes, and it also checks every door once a second, which is how it notices a door that has been moving too long or open too long.
 
@@ -38,6 +39,8 @@ Each time it raises an alert, the plugin writes a warning to the Event Log, such
 - as soon as the door reaches level 1 or level 2,
 - again if it goes up from level 1 to level 2,
 - and again every repeat interval, 15 minutes to start with, for as long as the door stays open. Set the repeat to 0 and there are no repeats.
+
+If the plugin restarts while the door is open, it carries on counting from when the door was really opened, and does not send an alert again that it had already sent. It goes by the time it saved before stopping, as long as it stopped less than half an hour earlier. Otherwise it goes by when the bottom sensor last changed, which can only make the count shorter, never longer.
 
 The plugin does not send notifications itself. Hang a Pushover message, an email or anything else you like off those two triggers.
 
