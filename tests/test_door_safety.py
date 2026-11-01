@@ -18,7 +18,8 @@
 # are fixed in plugin 1.12, so those two are ordinary tests now; added tests
 # for the HomeKit mirror and the did-the-door-move check. A press whose
 # release failed now counts for the repeat-press guard, and a missing Away or
-# Dark variable is warned about (also 1.12).
+# Dark variable is warned about, and door evaluations are serialised by a
+# lock (also 1.12).
 
 import types
 import time
@@ -416,3 +417,68 @@ def test_a_readable_away_variable_still_makes_the_alarm_urgent(plugin):
     _set_contacts(ind, False, True)
     p.deviceStartComm(door)
     assert door.states["alertLevel"] == 2
+
+
+# ── v1.12: one door evaluation at a time ───────────────────────────────
+
+def test_an_evaluation_waits_while_another_thread_holds_the_lock(plugin):
+    """The tick thread and Indigo's callback thread both run _evaluate. While
+    one is inside, the other must wait, or both can see the same change and
+    fire its triggers twice."""
+    import threading
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    p._lock.acquire()
+    try:
+        t = threading.Thread(target=p._evaluate, args=(door.id,))
+        t.start()
+        t.join(0.3)
+        assert t.is_alive(), "_evaluate ran while another thread held the lock"
+    finally:
+        p._lock.release()
+    t.join(2)
+    assert not t.is_alive()
+
+
+def test_triggers_fire_after_the_lock_is_let_go(plugin):
+    """If firing a trigger ever waited on an action of this plugin on the
+    other thread, holding the lock while firing could deadlock."""
+    import threading
+    p, ind, door, _ = plugin
+    p.startup()
+    p.triggerStartProcessing(_trigger(1, "doorOpened"))
+    p.deviceStartComm(door)
+    free = []
+
+    def execute(_t):
+        got = []
+
+        def try_lock():
+            ok = p._lock.acquire(timeout=1)
+            got.append(ok)
+            if ok:
+                p._lock.release()               # released by the thread that took it
+
+        probe = threading.Thread(target=try_lock)
+        probe.start()
+        probe.join(2)
+        free.append(bool(got and got[0]))
+
+    ind.trigger.execute = execute
+    _set_contacts(ind, False, True)
+    p._evaluate(door.id)
+    assert free == [True]
+
+
+def test_every_queued_event_still_fires_in_order(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    for i, ev in enumerate(("doorStartedMoving", "doorStartedOpening"), start=1):
+        p.triggerStartProcessing(_trigger(i, ev))
+    p.deviceStartComm(door)
+    _set_contacts(ind, False, False)
+    p._evaluate(door.id)
+    fired = [c[1] for c in ind.commands if c[0] == "trigger"]
+    assert fired == ["doorStartedMoving", "doorStartedOpening"]
+    assert p._queued is None

@@ -18,7 +18,9 @@
 # counts for the repeat-press window as soon as the relay switches on, so a
 # failed release can no longer let a retry press twice. A missing or
 # unreadable Away or Dark variable is warned about once, instead of silently
-# turning off that part of the alarm.
+# turning off that part of the alarm. Door evaluations are serialised by a
+# lock, so the tick thread and a contact update can no longer both see one
+# change and fire its triggers twice; triggers fire after the lock is let go.
 #
 # v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
 # you just chose, not the one you left, and turning Shadow Mode off sets the
@@ -74,6 +76,7 @@ except ImportError:
 
 import os as _os
 import sys as _sys
+import threading
 import time
 from datetime import datetime
 
@@ -128,6 +131,14 @@ class Plugin(indigo.PluginBase):
         # Config warnings already given, for a door with no runtime state yet.
         # Per-door warnings live on the door's own entry in self.doors.
         self._warned_no_state = set()
+        # One door evaluation at a time. _evaluate runs on the tick thread
+        # (runConcurrentThread) AND on Indigo's callback thread (deviceUpdated,
+        # Refresh State, deviceStartComm). Until v1.12 nothing stopped the two
+        # overlapping, and both could see the same change and fire Door Opened
+        # (or send a light command) twice. Re-entrant, because deviceStartComm
+        # takes it and then calls _evaluate.
+        self._lock = threading.RLock()
+        self._queued = None         # events waiting to fire, while _lock is held
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -190,6 +201,12 @@ class Plugin(indigo.PluginBase):
         except Exception as e:
             self.logger.debug(f"Could not refresh the state list: {e}")
         props = dict(dev.pluginProps)
+        with self._lock:
+            self._start_door(dev, props)
+        self._evaluate(dev.id, initial=True)
+
+    def _start_door(self, dev, props):
+        """Runtime state and contact index for one door. Called under _lock."""
         self.doors[dev.id] = {
             "props": props,
             "state": None,
@@ -230,12 +247,12 @@ class Plugin(indigo.PluginBase):
             # Awaiting configuration is not a fault — INFO, not ERROR.
             self.logger.info(f"{dev.name}: not configured yet ({', '.join(missing)}) — "
                              "open its settings and pick the two contact sensors")
-        self._evaluate(dev.id, initial=True)
 
     def deviceStopComm(self, dev):
-        self.doors.pop(dev.id, None)
-        for ids in self._watched.values():
-            ids.discard(dev.id)
+        with self._lock:
+            self.doors.pop(dev.id, None)
+            for ids in self._watched.values():
+                ids.discard(dev.id)
 
     def deviceUpdated(self, orig_dev, new_dev):
         super().deviceUpdated(orig_dev, new_dev)
@@ -389,6 +406,35 @@ class Plugin(indigo.PluginBase):
     # ------------------------------------------------------------------
 
     def _evaluate(self, dev_id, initial=False):
+        """Re-read one door and act on any change, one thread at a time.
+
+        Triggers are fired AFTER the lock is released. I am not certain
+        whether indigo.trigger.execute ever waits for the trigger's actions,
+        and one of those could be this plugin's own Open or Close action on
+        the other thread; firing outside the lock means that can never wait
+        on this lock.
+        """
+        with self._lock:
+            outer = self._queued is None            # not a nested call
+            if outer:
+                self._queued = []
+            try:
+                self._evaluate_locked(dev_id, initial)
+            finally:
+                if outer:
+                    queued, self._queued = self._queued, None
+        if outer:
+            for event_id, dev in queued:
+                self._fire(event_id, dev)
+
+    def _queue_event(self, event_id, dev):
+        """Fire an event once the evaluation that raised it has let go of _lock."""
+        if self._queued is None:
+            self._fire(event_id, dev)               # not inside _evaluate
+        else:
+            self._queued.append((event_id, dev))
+
+    def _evaluate_locked(self, dev_id, initial=False):
         st = self.doors.get(dev_id)
         if st is None:
             return
@@ -442,19 +488,19 @@ class Plugin(indigo.PluginBase):
             if not initial:
                 if state == G.OPEN:
                     self._set(dev, "lastOpened", self._stamp())
-                    self._fire(EV_OPENED, dev)
+                    self._queue_event(EV_OPENED, dev)
                 elif state == G.CLOSED:
                     self._set(dev, "lastClosed", self._stamp())
-                    self._fire(EV_CLOSED, dev)
+                    self._queue_event(EV_CLOSED, dev)
                 elif state == G.MOVING:
-                    self._fire(EV_MOVING, dev)
+                    self._queue_event(EV_MOVING, dev)
                     if direction == G.OPENING:
-                        self._fire(EV_OPENING, dev)
+                        self._queue_event(EV_OPENING, dev)
                     elif direction == G.CLOSING:
-                        self._fire(EV_CLOSING, dev)
+                        self._queue_event(EV_CLOSING, dev)
                 elif state == G.STUCK:
                     self.logger.warning(f"{dev.name}: stuck part-way")
-                    self._fire(EV_STUCK, dev)
+                    self._queue_event(EV_STUCK, dev)
                 self.logger.info(f"{dev.name}: {G.describe(state, direction=direction)}")
 
             self._apply_lamps(dev, state, props)
@@ -469,7 +515,7 @@ class Plugin(indigo.PluginBase):
             tail = "" if problem == G.CONTRADICTION else ", so the door's position is unknown"
             self.logger.warning(f"{dev.name}: {problem}{tail}")
             if not initial:
-                self._fire(EV_SENSOR_FAULT, dev)
+                self._queue_event(EV_SENSOR_FAULT, dev)
         elif not problem and st.get("problem"):
             self.logger.info(f"{dev.name}: the contact sensors are reporting again")
         st["problem"] = problem
@@ -514,7 +560,7 @@ class Plugin(indigo.PluginBase):
             self._set(dev, "lastAlertSent", self._stamp(now))
             msg = G.describe(state, open_min, away, night)
             self.logger.warning(f"{dev.name}: {msg}")
-            self._fire(EV_STILL_OPEN if level == G.ALERT_URGENT else EV_LEFT_OPEN, dev)
+            self._queue_event(EV_STILL_OPEN if level == G.ALERT_URGENT else EV_LEFT_OPEN, dev)
         elif level != st["last_level"] and level == G.ALERT_NONE:
             st["last_level"] = level
         if st["last_notified_min"] is None:
@@ -566,7 +612,7 @@ class Plugin(indigo.PluginBase):
             f"{dev.name}: the door button was pressed ({check['reason']}) "
             f"{int(waited)} seconds ago but the door is still {state} — check the "
             f"opener's power, the relay and its wiring")
-        self._fire(EV_NO_MOVE, dev)
+        self._queue_event(EV_NO_MOVE, dev)
 
     def _seed_opening(self, dev, st, state, now, bottom_changed, bottom_problem):
         """Start the left-open clock for a door that was already open at start.
@@ -892,13 +938,15 @@ class Plugin(indigo.PluginBase):
         # whose turnOff raised was never counted: the repeat-press guard let
         # an immediate retry press again, and a second press reverses the door.
         if st:
-            st["last_pulse_at"] = now
-            st["operated_by"] = reason
-            # Only a door at one end can prove it moved: its end sensor lets
-            # go. A press mid-travel may just stop it, which looks the same.
-            if st.get("state") in (G.CLOSED, G.OPEN):
-                st["press_check"] = {"at": time.time(), "from": st["state"],
-                                     "reason": reason}
+            with self._lock:                        # the tick reads these
+                st["last_pulse_at"] = now
+                st["operated_by"] = reason
+                # Only a door at one end can prove it moved: its end sensor
+                # lets go. A press mid-travel may just stop it, which looks
+                # the same.
+                if st.get("state") in (G.CLOSED, G.OPEN):
+                    st["press_check"] = {"at": time.time(), "from": st["state"],
+                                         "reason": reason}
         self._set(dev, "lastOperatedBy", reason)
 
         try:
