@@ -17,7 +17,8 @@
 # v1.1 (01-11-2026): the Open-while-opening and Close-while-closing faults
 # are fixed in plugin 1.12, so those two are ordinary tests now; added tests
 # for the HomeKit mirror and the did-the-door-move check. A press whose
-# release failed now counts for the repeat-press guard (also 1.12).
+# release failed now counts for the repeat-press guard, and a missing Away or
+# Dark variable is warned about (also 1.12).
 
 import types
 import time
@@ -357,3 +358,61 @@ def test_a_press_whose_release_fails_twice_still_counts(plugin):
     assert p._pulse(door, "test") is True        # the press itself happened
     assert p.doors[door.id]["last_pulse_at"] > 0
     assert door.states["lastOperatedBy"] == "test"
+
+
+# ── v1.12: a missing Away or Dark variable is not silent ───────────────
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+
+
+@pytest.mark.parametrize("key,label", [("awayVariable", "Away"),
+                                       ("nightVariable", "Dark")])
+def test_a_missing_alarm_variable_is_warned_about_once(plugin, caplog, key, label):
+    p, ind, door, _ = plugin
+    p.logger.setLevel("DEBUG")
+    p.startup()
+    door.pluginProps[key] = "NoSuchVariable"
+    p.deviceStartComm(door)
+    for _ in range(3):
+        p._evaluate(door.id)
+    hits = [m for m in _warnings(caplog) if f'"{label}" variable' in m]
+    assert len(hits) == 1 and "NoSuchVariable" in hits[0]
+
+
+def test_a_variable_holding_junk_is_warned_about(plugin, caplog):
+    p, ind, door, _ = plugin
+    p.logger.setLevel("DEBUG")
+    p.startup()
+    ind.variables["Away"].value = "maybe"
+    p.deviceStartComm(door)
+    assert any('"Away" variable' in m for m in _warnings(caplog))
+
+
+def test_no_warning_when_the_urgent_option_is_off(plugin, caplog):
+    p, ind, door, _ = plugin
+    p.logger.setLevel("DEBUG")
+    p.startup()
+    door.pluginProps["awayVariable"] = "NoSuchVariable"
+    door.pluginProps["urgentWhenAway"] = "false"
+    p.deviceStartComm(door)
+    assert not any('"Away" variable' in m for m in _warnings(caplog))
+
+
+def test_a_blank_variable_name_is_silently_ignored(plugin, caplog):
+    p, ind, door, _ = plugin
+    p.logger.setLevel("DEBUG")
+    p.startup()
+    door.pluginProps["awayVariable"] = ""
+    door.pluginProps["nightVariable"] = ""
+    p.deviceStartComm(door)
+    assert not any("variable" in m for m in _warnings(caplog))
+
+
+def test_a_readable_away_variable_still_makes_the_alarm_urgent(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    ind.variables["Away"].value = "true"
+    _set_contacts(ind, False, True)
+    p.deviceStartComm(door)
+    assert door.states["alertLevel"] == 2

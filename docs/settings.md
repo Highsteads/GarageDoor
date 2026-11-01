@@ -45,9 +45,9 @@ Both are needed. Until they are picked, the Event Log says the door is not confi
 | **First alert after (minutes)** | How long the door can be open before the alarm goes to level 1. 15 to start with. |
 | **Escalate to urgent after (minutes)** | How long the door can be open before the alarm goes to level 2, urgent. 45 to start with. |
 | **Repeat the alert every (minutes, 0 = once)** | How often the alert is repeated while the door stays open. 15 to start with. At 0 it is only repeated when it becomes more urgent. |
-| **"Away" variable name (blank to ignore)** | The name of an Indigo variable that is **true** when nobody is home. **Away** to start with. The plugin finds it by name, so deleting and recreating the variable does not break anything. |
+| **"Away" variable name (blank to ignore)** | The name of an Indigo variable that is **true** when nobody is home. **Away** to start with. The plugin finds it by name, so deleting and recreating the variable does not break anything. If the variable is missing or is not true or false, the Event Log says so once and the plugin treats it as false. |
 | **Urgent straight away when nobody is home** | Ticked to start with. While the away variable is true, the alarm is urgent as soon as the door leaves the closed position. |
-| **"Dark" variable name (blank to ignore)** | The name of an Indigo variable that is **true** when it is dark. **Nightime** to start with. |
+| **"Dark" variable name (blank to ignore)** | The name of an Indigo variable that is **true** when it is dark. **Nightime** to start with. If the variable is missing or is not true or false, the Event Log says so once and the plugin treats it as false. |
 | **Urgent when it is dark** | Ticked to start with. While the dark variable is true, the first alert is urgent rather than level 1. |
 
 A blank or unreadable number in any of these boxes falls back to the figure it starts with, so the alarm always works.

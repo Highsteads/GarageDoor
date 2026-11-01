@@ -9,11 +9,12 @@ The newest version is at the top.
 
 ## 1.12 — 1 November 2026
 
-Four fixes to how the plugin operates the door and reports it.
+Five fixes to how the plugin operates the door and reports it.
 
 - **Open and Close will not press twice.** If the door is already opening, **Open** does nothing, and if it is already closing, **Close** does nothing. Before, a second Open sent more than 5 seconds after the first (HomeKit retrying, or two triggers) pressed the button again, and on a one-button opener that stops or reverses the door. If the door is moving and the plugin has not seen which way (it started while the door was part-way), Open and Close do nothing either. **Toggle** still presses the button.
 - **HomeKit no longer shows Closed when the plugin cannot see the door.** When the door's position is unknown, for example because a sensor has gone offline, or the door is stuck part-way, the HomeKit variable now says open. Before, it kept its last value, so a door that was closed when its sensors dropped went on showing Closed in the Home app. If updating the variable fails, it is tried again once a minute.
 - **A failed release no longer lets the button be pressed twice.** If the relay switched on but the command to switch it off failed, the press was not counted, so a second command straight after pressed again and reversed the door. The press now counts as soon as the relay switches on, the plugin tries the release a second time, and if that fails too the Event Log says the relay may still be on.
+- **A missing Away or Dark variable is reported.** If the variable named in **"Away" variable name** or **"Dark" variable name** does not exist, or holds something other than true or false, the Event Log now says so once, when the plugin starts or the door is set up. Before, the plugin quietly took it as false, so a renamed Away variable meant the alarm never went urgent for an empty house. Leave the box blank if you do not use it.
 - **A press that does not move the door is noticed.** After pressing the button for a fully open or fully closed door, the plugin checks that the door has left that end within 15 seconds. If not, it logs a warning and runs the new **Garage Door Did Not Move When Pressed** trigger. Before, every press was reported as done whether or not the door moved.
 
 ## 1.11.1 — 5 October 2026

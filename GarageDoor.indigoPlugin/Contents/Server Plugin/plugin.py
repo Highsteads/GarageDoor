@@ -16,7 +16,9 @@
 # move the door within 15 seconds is logged as a warning and fires the new
 # Did Not Move event, instead of only ever being reported as done. A press
 # counts for the repeat-press window as soon as the relay switches on, so a
-# failed release can no longer let a retry press twice.
+# failed release can no longer let a retry press twice. A missing or
+# unreadable Away or Dark variable is warned about once, instead of silently
+# turning off that part of the alarm.
 #
 # v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
 # you just chose, not the one you left, and turning Shadow Mode off sets the
@@ -334,31 +336,16 @@ class Plugin(indigo.PluginBase):
             return None, f"the {label} sensor (device {dev_id}) cannot be read: {e}", None
 
     @staticmethod
-    def _var_true(name_or_id):
-        """Read a variable BY NAME, falling back to an id.
-
-        A variable deleted and recreated keeps its name but not its id, so a
-        pinned id breaks silently. Name first.
-        """
-        if not name_or_id:
-            return False
-        for key in (str(name_or_id), ):
-            try:
-                return str(indigo.variables[key].value).strip().lower() == "true"
-            except (KeyError, ValueError):
-                pass
-        try:
-            return str(indigo.variables[int(name_or_id)].value).strip().lower() == "true"
-        except (KeyError, ValueError, TypeError):
-            return False
-
-    @staticmethod
     def _var_reading(name_or_id):
         """A variable as True, False or None (missing, or not true/false).
 
-        _var_true answers False for a variable it cannot find, which is right
-        for the alarm and wrong for the light: "cannot tell whether it is dark"
-        must not read as "it is light".
+        Read BY NAME, falling back to an id: a variable deleted and recreated
+        keeps its name but not its id, so a pinned id breaks silently.
+
+        None is kept apart from False on purpose. Until v1.12 the alarm used a
+        reader that answered False for a variable it could not find, so a
+        renamed or deleted Away variable silently meant "somebody is home"
+        and the empty-house alarm never went urgent.
         """
         if not name_or_id:
             return None
@@ -512,8 +499,10 @@ class Plugin(indigo.PluginBase):
         self._check_press(dev, st, state, now)
 
         # --- the alarm ---------------------------------------------------
-        away  = self._var_true(props.get("awayVariable"))
-        night = self._var_true(props.get("nightVariable"))
+        away  = self._alarm_flag(dev, props, "awayVariable", "Away", "urgentWhenAway",
+                                 "an empty house will not make the alarm urgent")
+        night = self._alarm_flag(dev, props, "nightVariable", "Dark", "urgentWhenDark",
+                                 "darkness will not make the alarm urgent")
         level, notify = G.alarm_decision(
             state, open_min, away, night, props,
             last_level=st["last_level"], last_notified_minutes=st["last_notified_min"])
@@ -530,6 +519,30 @@ class Plugin(indigo.PluginBase):
             st["last_level"] = level
         if st["last_notified_min"] is None:
             self._set(dev, "lastAlertSent", "")
+
+    def _alarm_flag(self, dev, props, key, label, urgent_key, effect):
+        """One of the alarm's variables (Away, Dark) as True or False.
+
+        A variable that is named but missing, or holds something other than
+        true/false, counts as False as before — but is now warned about once
+        per plugin run, when its "urgent" option is on, instead of silently
+        switching that part of the alarm off. Blank means ignore it, quietly.
+        """
+        name = props.get(key)
+        if not name:
+            return False
+        reading = self._var_reading(name)
+        if reading is None:
+            st = self.doors.get(dev.id) or {}
+            if key == "nightVariable" and "dark_var" in st.get("warned", ()):
+                return False        # the light's warning already named it, and the alarm
+            if G.cfg_get(props, urgent_key):
+                self._warn_once(dev, f"alarm_{key}",
+                                f"the \"{label}\" variable '{name}' is missing or is not "
+                                f"true/false, so {effect}. Fix the variable, or clear "
+                                f"the name in the door's settings to ignore it.")
+            return False
+        return reading
 
     def _check_press(self, dev, st, state, now):
         """Say so when a press from a fully open or closed door did not move it.
@@ -636,10 +649,12 @@ class Plugin(indigo.PluginBase):
             night_var = props.get("nightVariable")
             dark = self._var_reading(night_var)
             if dark is None and night_var:
+                also = (" Darkness will not make the alarm urgent either."
+                        if G.cfg_get(props, "urgentWhenDark") else "")
                 self._warn_once(dev, "dark_var",
                                 f"there is no light-level sensor and the \"Dark\" variable "
                                 f"'{night_var}' cannot be read, so the garage light will come "
-                                f"on whenever the door opens, day or night.")
+                                f"on whenever the door opens, day or night.{also}")
         want = G.light_decision(state, present, lux, props,
                                 dark=dark, lux_configured=bool(lux_id))
         if want is None:

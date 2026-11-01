@@ -50,7 +50,7 @@ The [full guide](https://highsteads.github.io/GarageDoor/) goes through each ste
 
 ## What's new
 
-**v1.12** — Open and Close no longer press the button again when the door is already heading that way, which used to stop or reverse it. The HomeKit variable now shows the door as open when its position is unknown or it is stuck, instead of carrying on saying closed, and a failed update is tried again. A press now counts for the five-second repeat guard even if releasing the relay fails. If a press does not move the door within 15 seconds, the Event Log says so and a new **Did Not Move When Pressed** trigger runs.
+**v1.12** — Open and Close no longer press the button again when the door is already heading that way, which used to stop or reverse it. The HomeKit variable now shows the door as open when its position is unknown or it is stuck, instead of carrying on saying closed, and a failed update is tried again. A press now counts for the five-second repeat guard even if releasing the relay fails. A missing or unreadable Away or Dark variable is now reported in the Event Log instead of being quietly taken as false. If a press does not move the door within 15 seconds, the Event Log says so and a new **Did Not Move When Pressed** trigger runs.
 
 **v1.11.1** — Saving the settings now names the mode you just chose, not the one you left. Turning Shadow Mode off also sets the hall and conservatory lamps to suit the door as it is now, instead of waiting for the door to move, and leaves any lamp that is already right alone.
 
