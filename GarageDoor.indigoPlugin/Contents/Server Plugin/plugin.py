@@ -14,7 +14,9 @@
 # HomeKit variable shows an unknown or stuck door as open instead of staying
 # on its last value, and a failed write is tried again. A press that does not
 # move the door within 15 seconds is logged as a warning and fires the new
-# Did Not Move event, instead of only ever being reported as done.
+# Did Not Move event, instead of only ever being reported as done. A press
+# counts for the repeat-press window as soon as the relay switches on, so a
+# failed release can no longer let a retry press twice.
 #
 # v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
 # you just chose, not the one you left, and turning Shadow Mode off sets the
@@ -861,16 +863,19 @@ class Plugin(indigo.PluginBase):
         pulse_s = G.pulse_seconds(props)
         try:
             indigo.device.turnOn(int(relay_id))
-            self.sleep(pulse_s)
-            indigo.device.turnOff(int(relay_id))
         except Exception as e:
-            self.logger.error(f"{dev.name}: relay pulse failed — {e}")
+            self.logger.error(f"{dev.name}: could not switch the door relay on, "
+                              f"so the door was not pressed — {e}")
             try:
                 indigo.device.turnOff(int(relay_id))   # never leave it energised
             except Exception:
                 pass
             return False
 
+        # The button IS pressed from here on, whatever happens to the release.
+        # Until v1.12 this was recorded only after a clean release, so a press
+        # whose turnOff raised was never counted: the repeat-press guard let
+        # an immediate retry press again, and a second press reverses the door.
         if st:
             st["last_pulse_at"] = now
             st["operated_by"] = reason
@@ -880,6 +885,21 @@ class Plugin(indigo.PluginBase):
                 st["press_check"] = {"at": time.time(), "from": st["state"],
                                      "reason": reason}
         self._set(dev, "lastOperatedBy", reason)
+
+        try:
+            self.sleep(pulse_s)
+            indigo.device.turnOff(int(relay_id))
+        except Exception as e:
+            try:
+                indigo.device.turnOff(int(relay_id))   # never leave it energised
+                self.logger.warning(f"{dev.name}: pressed the door button ({reason}); "
+                                    f"the first release failed ({e}) but the second worked")
+            except Exception as e2:
+                self.logger.error(f"{dev.name}: pressed the door button ({reason}) but "
+                                  f"could not release the relay — it may still be ON. "
+                                  f"Check it now. ({e}; {e2})")
+            return True                                # the press itself happened
+
         self.logger.info(f"{dev.name}: pulsed the door relay ({reason})")
         return True
 

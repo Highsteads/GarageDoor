@@ -12,12 +12,12 @@
 #
 # Uses the stubbed-Indigo `plugin` fixture from test_plugin_smoke.py (shared
 # through conftest.py): door 1, bottom contact 101, top contact 102, relay 103.
-# Tests marked xfail describe a real fault found in review that is not fixed
-# yet; each reason names the fault so the fix can turn them green.
+# Every fault found in review is now fixed, so there are no xfails left.
 #
 # v1.1 (01-11-2026): the Open-while-opening and Close-while-closing faults
 # are fixed in plugin 1.12, so those two are ordinary tests now; added tests
-# for the HomeKit mirror and the did-the-door-move check.
+# for the HomeKit mirror and the did-the-door-move check. A press whose
+# release failed now counts for the repeat-press guard (also 1.12).
 
 import types
 import time
@@ -127,10 +127,6 @@ def test_shadow_mode_blocks_every_kind_of_press(plugin):
     assert _relay_presses(ind) == []
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: in _pulse, if turnOn succeeds but turnOff raises, the press DID "
-    "happen but last_pulse_at is never recorded, so the repeat-press guard "
-    "lets an immediate retry press again and reverse the door."))
 def test_a_press_whose_release_failed_still_counts_for_the_repeat_guard(plugin):
     p, ind, door, _ = plugin
     _control_on(p)
@@ -331,3 +327,33 @@ def test_shadow_mode_makes_no_press_to_check(plugin):
     p.deviceStartComm(door)
     p.actionOpenDoor(_act(door))
     assert p.doors[door.id]["press_check"] is None
+
+
+def test_a_relay_that_will_not_switch_on_is_not_counted_as_a_press(plugin):
+    """No press happened, so nothing is recorded and a retry is allowed."""
+    p, ind, door, _ = plugin
+    _control_on(p)
+    p.deviceStartComm(door)
+
+    def dead_on(_i):
+        raise RuntimeError("relay unreachable")
+
+    ind.device.turnOn = dead_on
+    assert p._pulse(door, "test") is False
+    assert p.doors[door.id]["last_pulse_at"] == 0.0
+    assert p.doors[door.id]["press_check"] is None
+    assert ("off", 103) in ind.commands          # still told to let go
+
+
+def test_a_press_whose_release_fails_twice_still_counts(plugin):
+    p, ind, door, _ = plugin
+    _control_on(p)
+    p.deviceStartComm(door)
+
+    def dead_off(_i):
+        raise RuntimeError("Z-Wave timeout")
+
+    ind.device.turnOff = dead_off
+    assert p._pulse(door, "test") is True        # the press itself happened
+    assert p.doors[door.id]["last_pulse_at"] > 0
+    assert door.states["lastOperatedBy"] == "test"
