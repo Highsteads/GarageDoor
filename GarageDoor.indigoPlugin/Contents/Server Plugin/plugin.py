@@ -21,6 +21,8 @@
 # turning off that part of the alarm. Door evaluations are serialised by a
 # lock, so the tick thread and a contact update can no longer both see one
 # change and fire its triggers twice; triggers fire after the lock is let go.
+# Travel time no longer counts a sensor outage, and a state that cannot be
+# written is a warning, not a debug line.
 #
 # v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
 # you just chose, not the one you left, and turning Shadow Mode off sets the
@@ -468,10 +470,16 @@ class Plugin(indigo.PluginBase):
 
         # --- transitions -------------------------------------------------
         if state != previous:
-            if state in (G.MOVING, G.UNKNOWN) and st["moving_since"] is None:
+            # Only real travel starts the travel clock. Until v1.12 Unknown
+            # started it too, so after a sensor outage Travel time recorded
+            # the length of the outage, and a door seen part-way when the
+            # sensors came back went straight to Stuck on the outage's clock.
+            if state == G.UNKNOWN:
+                st["moving_since"] = None           # no reading is not travel
+            elif state == G.MOVING and st["moving_since"] is None:
                 st["moving_since"] = now
             if state in (G.CLOSED, G.OPEN):
-                if st["moving_since"]:
+                if st["moving_since"] and previous in (G.MOVING, G.STUCK):
                     self._set(dev, "travelSeconds", int(now - st["moving_since"]))
                 st["moving_since"] = None
 
@@ -645,11 +653,25 @@ class Plugin(indigo.PluginBase):
                              f"(from {how})")
 
     def _set(self, dev, key, value):
+        """Write one of the door's states if it changed.
+
+        A failure is a WARNING the first time for each state in a plugin run,
+        then DEBUG. Until v1.12 it was only ever DEBUG, so a state that could
+        not be written (for example one missing from an old device) went
+        stale with nothing in the Event Log.
+        """
         try:
             if dev.states.get(key) != value:
                 dev.updateStateOnServer(key, value)
         except Exception as e:
-            self.logger.debug(f"Could not write {key}: {e}")
+            st = self.doors.get(dev.id)
+            seen = st.get("warned", set()) if st is not None else self._warned_no_state
+            if f"set_{key}" in seen:
+                self.logger.debug(f"Could not write {key}: {e}")
+            else:
+                self._warn_once(dev, f"set_{key}",
+                                f"could not write the '{key}' state ({e}). It will "
+                                f"go out of date until this is fixed.")
 
     @staticmethod
     def _stamp(epoch=None):

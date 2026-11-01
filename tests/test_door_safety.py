@@ -18,8 +18,9 @@
 # are fixed in plugin 1.12, so those two are ordinary tests now; added tests
 # for the HomeKit mirror and the did-the-door-move check. A press whose
 # release failed now counts for the repeat-press guard, and a missing Away or
-# Dark variable is warned about, and door evaluations are serialised by a
-# lock (also 1.12).
+# Dark variable is warned about, door evaluations are serialised by a lock,
+# travel time ignores sensor outages and a failed state write is warned
+# about (also 1.12).
 
 import types
 import time
@@ -482,3 +483,66 @@ def test_every_queued_event_still_fires_in_order(plugin):
     fired = [c[1] for c in ind.commands if c[0] == "trigger"]
     assert fired == ["doorStartedMoving", "doorStartedOpening"]
     assert p._queued is None
+
+
+# ── v1.12: travel time and stuck ignore a sensor outage ────────────────
+
+def test_a_sensor_outage_is_not_counted_as_travel(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)                     # closed
+    ind.devices[101].errorState = "offline"
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "unknown"
+    assert p.doors[door.id]["moving_since"] is None
+    ind.devices[101].errorState = ""            # back, an hour later, say
+    _set_contacts(ind, False, True)             # and now open
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "open"
+    assert "travelSeconds" not in [k for k, _ in door.written]
+
+
+def test_a_door_seen_part_way_after_an_outage_is_not_stuck_at_once(plugin, monkeypatch):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    ind.devices[101].errorState = "offline"
+    p._evaluate(door.id)
+    later = time.time() + 3600                  # the outage lasts an hour
+    monkeypatch.setattr(time, "time", lambda: later)
+    ind.devices[101].errorState = ""
+    _set_contacts(ind, False, False)
+    p._evaluate(door.id)
+    p._evaluate(door.id)
+    assert door.states["doorState"] in ("moving", "opening", "closing")
+
+
+def test_real_travel_is_still_timed(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    _set_contacts(ind, False, False)
+    p._evaluate(door.id)
+    p.doors[door.id]["moving_since"] -= 12      # twelve seconds of travel
+    _set_contacts(ind, False, True)
+    p._evaluate(door.id)
+    assert door.states["travelSeconds"] == 12
+
+
+# ── v1.12: a state that cannot be written is not silent ────────────────
+
+def test_a_failed_state_write_is_warned_about_once(plugin, caplog):
+    p, ind, door, _ = plugin
+    p.logger.setLevel("DEBUG")
+    p.startup()
+    p.deviceStartComm(door)
+
+    def refuse(key, value, clearErrorState=True):
+        raise KeyError(key)
+
+    door.updateStateOnServer = refuse
+    for _ in range(3):
+        p._set(door, "openDurationMinutes", 7)
+    warned = [r for r in caplog.records
+              if r.levelname == "WARNING" and "openDurationMinutes" in r.getMessage()]
+    assert len(warned) == 1
