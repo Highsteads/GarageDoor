@@ -7,6 +7,14 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 1.12 — 1 November 2026
+
+Three fixes to how the plugin operates the door and reports it.
+
+- **Open and Close will not press twice.** If the door is already opening, **Open** does nothing, and if it is already closing, **Close** does nothing. Before, a second Open sent more than 5 seconds after the first (HomeKit retrying, or two triggers) pressed the button again, and on a one-button opener that stops or reverses the door. If the door is moving and the plugin has not seen which way (it started while the door was part-way), Open and Close do nothing either. **Toggle** still presses the button.
+- **HomeKit no longer shows Closed when the plugin cannot see the door.** When the door's position is unknown, for example because a sensor has gone offline, or the door is stuck part-way, the HomeKit variable now says open. Before, it kept its last value, so a door that was closed when its sensors dropped went on showing Closed in the Home app. If updating the variable fails, it is tried again once a minute.
+- **A press that does not move the door is noticed.** After pressing the button for a fully open or fully closed door, the plugin checks that the door has left that end within 15 seconds. If not, it logs a warning and runs the new **Garage Door Did Not Move When Pressed** trigger. Before, every press was reported as done whether or not the door moved.
+
 ## 1.11.1 — 5 October 2026
 
 Two small fixes to what happens when you change Shadow Mode.

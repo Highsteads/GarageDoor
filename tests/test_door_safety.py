@@ -8,12 +8,16 @@
 #              tick that raised.
 # Author:      CliveS & Claude Opus 5.5
 # Date:        01-11-2026
-# Version:     1.0
+# Version:     1.1
 #
 # Uses the stubbed-Indigo `plugin` fixture from test_plugin_smoke.py (shared
 # through conftest.py): door 1, bottom contact 101, top contact 102, relay 103.
-# Tests marked xfail describe a real fault found in review. They are NOT fixed
-# here; each reason names the fault so the fix can turn them green.
+# Tests marked xfail describe a real fault found in review that is not fixed
+# yet; each reason names the fault so the fix can turn them green.
+#
+# v1.1 (01-11-2026): the Open-while-opening and Close-while-closing faults
+# are fixed in plugin 1.12, so those two are ordinary tests now; added tests
+# for the HomeKit mirror and the did-the-door-move check.
 
 import types
 import time
@@ -76,11 +80,6 @@ def test_a_restart_with_the_door_open_fires_no_door_events(plugin):
 
 # ── one press per request ──────────────────────────────────────────────
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: actionOpenDoor only refuses when the door is already OPEN. Asked to "
-    "open while it is already opening (after the 5 s repeat-press window) it "
-    "presses again, and on a single-button opener that stops or reverses the "
-    "door. SPEC.md rule 4: re-asserting the same state never fires the relay."))
 def test_open_while_already_opening_does_not_press_again(plugin):
     p, ind, door, _ = plugin
     _control_on(p)
@@ -95,10 +94,6 @@ def test_open_while_already_opening_does_not_press_again(plugin):
     assert len(_relay_presses(ind)) == 1
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: actionCloseDoor only refuses when the door is already CLOSED. Asked "
-    "to close while it is already closing it presses again, stopping or "
-    "reversing the door. Same fault as the opening case."))
 def test_close_while_already_closing_does_not_press_again(plugin):
     p, ind, door, _ = plugin
     _control_on(p)
@@ -219,3 +214,120 @@ def test_a_sensor_fault_event_fires_once_not_every_tick(plugin):
         p._evaluate(door.id)
     assert [c for c in ind.commands if c == ("trigger", "sensorFault")] == \
         [("trigger", "sensorFault")]
+
+
+# ── v1.12: no second press for a door already heading that way ────────
+
+def test_open_while_closing_still_presses(plugin):
+    """Only the SAME direction is refused. Asked to open a closing door, the
+    plugin still presses, as it always has."""
+    p, ind, door, _ = plugin
+    _control_on(p)
+    _set_contacts(ind, False, True)
+    p.deviceStartComm(door)                     # open
+    _set_contacts(ind, False, False)            # travelling down
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "closing"
+    p.actionOpenDoor(_act(door))
+    assert len(_relay_presses(ind)) == 1
+
+
+@pytest.mark.parametrize("action", ["actionOpenDoor", "actionCloseDoor"])
+def test_a_door_moving_with_no_known_direction_is_not_pressed(plugin, action):
+    """Started mid-travel: the plugin has not seen which end it left, so a
+    press could do either. Toggle is the deliberate way round this."""
+    p, ind, door, _ = plugin
+    _control_on(p)
+    _set_contacts(ind, False, False)
+    p.deviceStartComm(door)
+    assert door.states["doorState"] == "moving"
+    getattr(p, action)(_act(door))
+    assert _relay_presses(ind) == []
+    p.actionToggleDoor(_act(door))
+    assert len(_relay_presses(ind)) == 1
+
+
+# ── v1.12: HomeKit is never left on a stale "closed" ───────────────────
+
+def _var_writes(ind):
+    return [c[2] for c in ind.commands if c[0] == "var"]
+
+
+def test_homekit_says_open_when_a_closed_doors_sensor_drops(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)                     # closed
+    assert _var_writes(ind)[-1] == "on"         # inverted: on = closed
+    ind.devices[101].errorState = "offline"
+    p._evaluate(door.id)
+    assert door.states["doorState"] == "unknown"
+    assert _var_writes(ind)[-1] == "off"        # shown as open, not stale closed
+
+
+def test_homekit_is_not_rewritten_every_tick(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    for _ in range(5):
+        p._evaluate(door.id)
+    assert len(_var_writes(ind)) == 1
+
+
+def test_a_failed_homekit_write_is_tried_again(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    real = ind.variable.updateValue
+    calls = {"n": 0}
+
+    def flaky(vid, val):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("variable busy")
+        real(vid, val)
+
+    ind.variable.updateValue = flaky
+    p.deviceStartComm(door)                     # first write raises
+    assert _var_writes(ind) == []
+    p._evaluate(door.id)                        # inside the retry wait: nothing
+    assert _var_writes(ind) == []
+    p.doors[door.id]["hk_fail_at"] -= 61        # a minute later
+    p._evaluate(door.id)
+    assert _var_writes(ind) == ["on"]
+
+
+# ── v1.12: a press that does not move the door is noticed ──────────────
+
+def test_a_press_that_does_not_move_the_door_is_reported_once(plugin):
+    p, ind, door, _ = plugin
+    _control_on(p)
+    p.triggerStartProcessing(_trigger(1, "doorDidNotMove"))
+    p.deviceStartComm(door)                     # closed
+    p.actionOpenDoor(_act(door))
+    p._evaluate(door.id)
+    assert ("trigger", "doorDidNotMove") not in ind.commands   # too soon
+    p.doors[door.id]["press_check"]["at"] -= 16
+    for _ in range(3):
+        p._evaluate(door.id)
+    assert ind.commands.count(("trigger", "doorDidNotMove")) == 1
+
+
+def test_a_press_that_moves_the_door_is_not_reported(plugin):
+    p, ind, door, _ = plugin
+    _control_on(p)
+    p.triggerStartProcessing(_trigger(1, "doorDidNotMove"))
+    p.deviceStartComm(door)
+    p.actionOpenDoor(_act(door))
+    _set_contacts(ind, False, False)            # it left the bottom
+    p._evaluate(door.id)
+    assert p.doors[door.id]["press_check"] is None
+    _set_contacts(ind, True, False)             # even if it later comes back
+    p._evaluate(door.id)
+    assert ("trigger", "doorDidNotMove") not in ind.commands
+
+
+def test_shadow_mode_makes_no_press_to_check(plugin):
+    p, ind, door, _ = plugin
+    p.startup()
+    p.deviceStartComm(door)
+    p.actionOpenDoor(_act(door))
+    assert p.doors[door.id]["press_check"] is None

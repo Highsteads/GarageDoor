@@ -83,4 +83,13 @@
             </Field>
         </ConfigUI>
     </Event>
+    <Event id="doorDidNotMove">
+        <Name>Garage Door Did Not Move When Pressed</Name>
+        <ConfigUI>
+            <Field id="doorDeviceId" type="menu">
+                <Label>Which door (blank = any):</Label>
+                <List class="self" filter="self.garageDoor" method="getDoorList"/>
+            </Field>
+        </ConfigUI>
+    </Event>
 </Events>

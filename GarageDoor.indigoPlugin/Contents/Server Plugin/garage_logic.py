@@ -5,8 +5,12 @@
 #              Indigo import — the door's state, when to raise the alarm, when
 #              to light the garage, and what to publish for HomeKit.
 # Author:      CliveS & Claude Opus 5
-# Date:        05-10-2026
-# Version:     1.3
+# Date:        01-11-2026
+# Version:     1.4
+#
+# v1.4 (01-11-2026): homekit_value() shows an unknown or stuck door as open,
+# never leaving HomeKit on a stale "closed"; PRESS_CONFIRM_SECONDS for the
+# check that a press actually moved the door.
 #
 # v1.3 (05-10-2026): contact_problem() and assess_door() — a contact that is
 # disabled, in error or reported offline is no reading at all, so the door is
@@ -63,6 +67,11 @@ DEFAULTS = {
 }
 
 PULSE_MAX_MS = 10000    # a momentary press, never a held button
+
+# How long after a press from a fully open or fully closed door its end
+# sensor must have let go. A reed parts within a second or two of the door
+# starting to move; fifteen seconds allows for a slow opener and a slow radio.
+PRESS_CONFIRM_SECONDS = 15
 
 
 def cfg_get(cfg, key):
@@ -519,12 +528,19 @@ def homekit_value(state, invert=True):
     """What to write to the HomeKit mirror variable.
 
     HomeKitLink-Siri maps ON to Closed here, so the variable runs inverted
-    against every instinct: "on" means the garage is SHUT. Only a definite
-    reading is published — an unknown door must not be reported as closed.
+    against every instinct: "on" means the garage is SHUT.
+
+    HomeKit has only open and closed, no "unknown". Until v1.12 an unknown or
+    stuck door published nothing, which left the variable on its last value —
+    so a door that was closed when its sensors dropped went on showing Closed
+    in the Home app for the whole outage. Now only a PROVEN closed door shows
+    closed; unknown and stuck show open. MOVING still returns None: it is a
+    transient of about twenty seconds, and the door reaching an end (or going
+    stuck) settles it.
     """
     if state == CLOSED:
         return "on" if invert else "off"
-    if state == OPEN:
+    if state in (OPEN, UNKNOWN, STUCK):
         return "off" if invert else "on"
     return None
 

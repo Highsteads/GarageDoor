@@ -5,8 +5,16 @@
 #              how long it has been open, the alarm when it is left that way,
 #              and the light that follows whoever walked in.
 # Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5
-# Date:        05-10-2026
-# Version:     1.11.1
+# Date:        01-11-2026
+# Version:     1.12
+#
+# v1.12 (01-11-2026, Claude Opus 5.5): Open and Close no longer press the
+# button again for a door already heading that way, or one that is moving and
+# whose direction is not known — a second press stops or reverses it. The
+# HomeKit variable shows an unknown or stuck door as open instead of staying
+# on its last value, and a failed write is tried again. A press that does not
+# move the door within 15 seconds is logged as a warning and fires the new
+# Did Not Move event, instead of only ever being reported as done.
 #
 # v1.11.1 (05-10-2026, Claude Sonnet 5.5): saving the settings names the mode
 # you just chose, not the one you left, and turning Shadow Mode off sets the
@@ -78,6 +86,7 @@ PLUGIN_ID = "com.clives.indigoplugin.garagedoor"
 
 TICK_SECONDS = 1.0          # fine enough to time travel, cheap enough to ignore
 LIGHT_RETRY_SECONDS = 60    # how soon a light command that raised is tried again
+HOMEKIT_RETRY_SECONDS = 60  # how soon a HomeKit variable write that raised is tried again
 
 # Events declared in Events.xml
 EV_OPENED       = "doorOpened"
@@ -89,6 +98,7 @@ EV_LEFT_OPEN    = "doorLeftOpen"
 EV_STILL_OPEN   = "doorStillOpen"
 EV_STUCK        = "doorStuck"
 EV_SENSOR_FAULT = "sensorFault"
+EV_NO_MOVE      = "doorDidNotMove"
 
 # Fallbacks matching the retired controller's HALL_COLORS, used when a
 # colour field is blank or unreadable.
@@ -190,6 +200,9 @@ class Plugin(indigo.PluginBase):
             "light_mode": None,         # shadow flag when light_want was set
             "light_fail_at": None,      # when a light command last raised
             "problem": None,            # what is wrong with the sensors, "" = nothing
+            "hk_written": None,         # last HomeKit value that actually went
+            "hk_fail_at": None,         # when a HomeKit write last raised
+            "press_check": None,        # {"at", "from", "reason"} after a press
             # What this door looked like before the plugin stopped, so a
             # restart with the door open does not start its clock again.
             "seed": {
@@ -456,7 +469,6 @@ class Plugin(indigo.PluginBase):
                 self.logger.info(f"{dev.name}: {G.describe(state, direction=direction)}")
 
             self._apply_lamps(dev, state, props)
-            self._mirror_homekit(dev, state, props)
         elif lamps_mode_changed:
             # No door change to ride on, so a change of Shadow Mode would leave
             # the lamps as they were until the door next moved.
@@ -490,6 +502,13 @@ class Plugin(indigo.PluginBase):
         # them. _apply_light only sends a command when the answer changes.
         self._apply_light(dev, state, props)
 
+        # HomeKit is checked every tick too, so a write that failed is tried
+        # again. _mirror_homekit only writes when the value changes.
+        self._mirror_homekit(dev, state, props)
+
+        # --- did the last press move the door? -----------------------------
+        self._check_press(dev, st, state, now)
+
         # --- the alarm ---------------------------------------------------
         away  = self._var_true(props.get("awayVariable"))
         night = self._var_true(props.get("nightVariable"))
@@ -509,6 +528,30 @@ class Plugin(indigo.PluginBase):
             st["last_level"] = level
         if st["last_notified_min"] is None:
             self._set(dev, "lastAlertSent", "")
+
+    def _check_press(self, dev, st, state, now):
+        """Say so when a press from a fully open or closed door did not move it.
+
+        Until v1.12 a press was reported as done the moment the relay command
+        went, whether or not the door moved: an opener without power, a relay
+        that did not click, or a radio command that never arrived all looked
+        like success. The door leaving its end is the only real proof.
+        """
+        check = st.get("press_check")
+        if not check:
+            return
+        if state != check["from"]:
+            st["press_check"] = None                # it moved (or lost its sensors)
+            return
+        waited = now - check["at"]
+        if waited < G.PRESS_CONFIRM_SECONDS:
+            return
+        st["press_check"] = None                    # say it once per press
+        self.logger.warning(
+            f"{dev.name}: the door button was pressed ({check['reason']}) "
+            f"{int(waited)} seconds ago but the door is still {state} — check the "
+            f"opener's power, the relay and its wiring")
+        self._fire(EV_NO_MOVE, dev)
 
     def _seed_opening(self, dev, st, state, now, bottom_changed, bottom_problem):
         """Start the left-open clock for a door that was already open at start.
@@ -734,17 +777,42 @@ class Plugin(indigo.PluginBase):
         return have == tuple(rgb)
 
     def _mirror_homekit(self, dev, state, props):
+        """Keep the HomeKit variable in line with the door.
+
+        Called every tick. hk_written records a value that actually WENT, so
+        a write that raised is tried again (every HOMEKIT_RETRY_SECONDS)
+        rather than waiting for the door to move. Until v1.12 it was written
+        only on a door change, and a failure was never repeated.
+        """
         var = props.get("homekitVariable")
         if not var:
             return
         value = G.homekit_value(state, G.as_bool(props.get("homekitInvert"), True))
         if value is None:
-            return                                  # never claim shut when unsure
+            return                                  # moving: the next end settles it
+        st = self.doors.get(dev.id)
+        if st is None:
+            st = {}
+        if st.get("hk_written") == value:
+            return
+        failed_at = st.get("hk_fail_at")
+        if failed_at is not None and (time.time() - failed_at) < HOMEKIT_RETRY_SECONDS:
+            return                                  # do not hammer a failing write
         try:
             indigo.variable.updateValue(
                 indigo.variables[str(var)].id, str(value))   # variables take STRINGS
         except Exception as e:
-            self.logger.error(f"Could not update the HomeKit variable: {e}")
+            if failed_at is None:
+                self.logger.error(f"Could not update the HomeKit variable: {e} "
+                                  f"(trying again every {HOMEKIT_RETRY_SECONDS} seconds)")
+            else:
+                self.logger.debug(f"HomeKit variable still not updating: {e}")
+            st["hk_fail_at"] = time.time()
+            return
+        if failed_at is not None:
+            self.logger.info(f"{dev.name}: the HomeKit variable updated after all")
+        st["hk_fail_at"] = None
+        st["hk_written"] = value
 
     # ------------------------------------------------------------------
     # runConcurrentThread — the thing scripts could never do
@@ -806,6 +874,11 @@ class Plugin(indigo.PluginBase):
         if st:
             st["last_pulse_at"] = now
             st["operated_by"] = reason
+            # Only a door at one end can prove it moved: its end sensor lets
+            # go. A press mid-travel may just stop it, which looks the same.
+            if st.get("state") in (G.CLOSED, G.OPEN):
+                st["press_check"] = {"at": time.time(), "from": st["state"],
+                                     "reason": reason}
         self._set(dev, "lastOperatedBy", reason)
         self.logger.info(f"{dev.name}: pulsed the door relay ({reason})")
         return True
@@ -827,6 +900,8 @@ class Plugin(indigo.PluginBase):
             return                                    # idempotent, per the spec
         if self._refuse_unknown(dev, st, "open"):
             return
+        if self._refuse_moving(dev, st, G.OPENING):
+            return
         self._pulse(dev, action.props.get("source") or "action:open")
 
     def actionCloseDoor(self, action):
@@ -838,6 +913,8 @@ class Plugin(indigo.PluginBase):
             self.logger.info(f"{dev.name}: already closed, nothing to do")
             return
         if self._refuse_unknown(dev, st, "close"):
+            return
+        if self._refuse_moving(dev, st, G.CLOSING):
             return
         self._pulse(dev, action.props.get("source") or "action:close")
 
@@ -854,6 +931,30 @@ class Plugin(indigo.PluginBase):
         self.logger.warning(f"{dev.name}: not asked to {verb} — {why}. "
                             "Use Toggle if you mean to press the button anyway.")
         return True
+
+    def _refuse_moving(self, dev, st, want):
+        """Open and Close do nothing to a door already travelling that way.
+
+        The opener has one button, and a press on a moving door stops or
+        reverses it — so "open" sent twice (HomeKit retrying, two triggers)
+        used to stop the door it had just started, once the repeat-press
+        window had passed. A door moving with no known direction (the plugin
+        started mid-travel) is refused too: the press could do either. A
+        door heading the OTHER way is still pressed, as before.
+        """
+        if st.get("state") != G.MOVING:
+            return False
+        direction = G.door_direction(G.MOVING, st.get("last_settled"))
+        verb = "open" if want == G.OPENING else "close"
+        if direction == want:
+            self.logger.info(f"{dev.name}: already {want}, nothing to do")
+            return True
+        if direction == G.NO_DIRECTION:
+            self.logger.warning(f"{dev.name}: not asked to {verb} — the door is moving "
+                                "and the plugin has not seen which way. "
+                                "Use Toggle if you mean to press the button anyway.")
+            return True
+        return False
 
     def actionToggleDoor(self, action):
         dev = self._door_for(action)

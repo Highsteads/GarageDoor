@@ -245,10 +245,19 @@ def test_homekit_inversion_is_optional():
     assert g.homekit_value(g.OPEN, invert=False) == "on"
 
 
-@pytest.mark.parametrize("state", [g.MOVING, g.STUCK, g.UNKNOWN])
-def test_an_uncertain_door_publishes_nothing(state):
-    """Never tell HomeKit the garage is shut when we do not know that."""
-    assert g.homekit_value(state) is None
+def test_a_moving_door_publishes_nothing():
+    """A transient: the door reaching an end, or going stuck, settles it."""
+    assert g.homekit_value(g.MOVING) is None
+
+
+@pytest.mark.parametrize("state", [g.STUCK, g.UNKNOWN])
+@pytest.mark.parametrize("invert", [True, False])
+def test_an_uncertain_door_shows_open_never_closed(state, invert):
+    """Never tell HomeKit the garage is shut when we do not know that — and
+    since v1.12, do not leave it on a stale "closed" either: HomeKit has no
+    "unknown", so the safe answer is open. (Until v1.12 this published None
+    and the variable kept its last value.)"""
+    assert g.homekit_value(state, invert) == g.homekit_value(g.OPEN, invert)
 
 
 # ══════════════════════════════════════════════════════════════════════

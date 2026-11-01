@@ -2,7 +2,7 @@
 
 **One Indigo device that knows where your garage door is, and tells you when it has been left open.**
 
-**Version:** 1.11.1 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
+**Version:** 1.12 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later
 
 **[Read the full guide](https://highsteads.github.io/GarageDoor/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -49,6 +49,8 @@ I wrote it because six different scripts and pages in my Indigo system each work
 The [full guide](https://highsteads.github.io/GarageDoor/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v1.12** — Open and Close no longer press the button again when the door is already heading that way, which used to stop or reverse it. The HomeKit variable now shows the door as open when its position is unknown or it is stuck, instead of carrying on saying closed, and a failed update is tried again. If a press does not move the door within 15 seconds, the Event Log says so and a new **Did Not Move When Pressed** trigger runs.
 
 **v1.11.1** — Saving the settings now names the mode you just chose, not the one you left. Turning Shadow Mode off also sets the hall and conservatory lamps to suit the door as it is now, instead of waiting for the door to move, and leaves any lamp that is already right alone.
 

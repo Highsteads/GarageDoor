@@ -83,9 +83,9 @@ When the door closes, the lamps go back to how the house had them, judged by a *
 
 ## The HomeKit variable
 
-If you name an Indigo variable for HomeKit, the plugin sets it to **on** or **off** each time the door reaches closed or open. With **Inverted** ticked, which it is to start with, **on** means closed, which is what the HomeKitLink-Siri plugin expects for a garage door. Untick it and **on** means open.
+If you name an Indigo variable for HomeKit, the plugin sets it to **on** or **off** each time the door reaches closed or open. If updating it fails, the plugin tries again once a minute. With **Inverted** ticked, which it is to start with, **on** means closed, which is what the HomeKitLink-Siri plugin expects for a garage door. Untick it and **on** means open.
 
-While the door is moving, stuck or unknown the variable is left as it was, so it never says the door is shut when the plugin is not sure.
+HomeKit has no "unknown", so when the door is stuck part-way or its position is unknown (for example a sensor has gone offline) the variable says **open**. It only ever says closed when both sensors prove it. While the door is simply moving, the variable is left as it was for the few seconds until the door reaches an end.
 
 The variable has to exist already. The plugin does not create it.
 
